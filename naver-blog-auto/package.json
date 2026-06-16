@@ -1,0 +1,17 @@
+{
+  "name": "naver-blog-auto",
+  "version": "1.0.0",
+  "description": "명령 하나로 서로이웃 신청 + 맞춤 멘트 + 댓글 자동 처리",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.98.0",
+    "playwright": "^1.60.0"
+  }
+}

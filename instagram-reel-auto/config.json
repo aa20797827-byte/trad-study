@@ -1,0 +1,19 @@
+{
+  "use_ai": false,
+  "gemini_api_key": "",
+  "instagram": {
+    "access_token": "YOUR_INSTAGRAM_ACCESS_TOKEN",
+    "user_id": "YOUR_INSTAGRAM_USER_ID",
+    "caption_hashtags": "#동기부여 #명언 #자기계발 #성공 #긍정에너지 #오늘의명언 #동기부여영상 #성장 #목표 #도전"
+  },
+  "content": {
+    "themes": ["성공", "자기계발", "긍정적사고", "도전정신", "성장마인드셋", "시간관리", "목표달성", "회복탄력성"],
+    "video_duration": 20,
+    "video_theme": "dark",
+    "language": "korean"
+  },
+  "schedule": {
+    "post_time": "08:00",
+    "timezone": "Asia/Seoul"
+  }
+}

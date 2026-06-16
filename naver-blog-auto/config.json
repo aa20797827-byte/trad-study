@@ -1,0 +1,52 @@
+{
+  "naver": {
+    "id": "johnpolabear11@naver.com",
+    "password": "posteam0315?",
+    "blogId": "johnpolabear11"
+  },
+  "settings": {
+    "dailyLimit": 15,
+    "delayMin": 5,
+    "delayMax": 10,
+    "writeCount": 1,
+    "commentEnabled": true,
+    "neighborRequestEnabled": true
+  },
+  "myBlogInfo": {
+    "description": "안녕하세요 리빙 품목을 리뷰하는 블로그 입니다."
+  },
+  "targetNiches": [
+    "에어프라이어",
+    "무선청소기",
+    "공기청정기",
+    "제습기",
+    "아로마 디퓨저",
+    "캔들워머",
+    "극세사이불",
+    "여름이불",
+    "러그",
+    "무드등",
+    "침대 협탁",
+    "투명 수납함",
+    "주방 수납",
+    "실리콘 밀폐용기",
+    "진공 밀폐용기",
+    "야채 다지기",
+    "조리도구 세트",
+    "원목 도마",
+    "세라믹 프라이팬",
+    "블렌더",
+    "음식물 처리기",
+    "건조대",
+    "접이식 사다리",
+    "화장대",
+    "욕실 수납장",
+    "라탄 바구니",
+    "모듈형 선반",
+    "스탠드 조명",
+    "LED 무드등",
+    "아크릴 수납"
+  ],
+  "blacklist": [],
+  "coupangPartnerId": "AF6456150"
+}

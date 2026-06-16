@@ -1,0 +1,30 @@
+# 서로이웃 신청할 블로그 목록
+# 한 줄에 블로그 URL 하나씩 입력하세요
+# 예시:
+# https://blog.naver.com/example1
+# https://blog.naver.com/example2
+
+https://blog.naver.com/sarangaezip
+https://blog.naver.com/livingaube
+https://blog.naver.com/ssongdaluv
+https://blog.naver.com/dalhh817
+https://blog.naver.com/alswna1
+https://blog.naver.com/mmfave
+https://blog.naver.com/jeongsemi88
+https://blog.naver.com/znznel1
+https://blog.naver.com/sweet8camelia
+https://blog.naver.com/zikzangin_7th
+https://blog.naver.com/pinkiebear
+https://blog.naver.com/iamysu
+https://blog.naver.com/after_round
+https://blog.naver.com/jin02ga
+https://blog.naver.com/totoro3123
+https://blog.naver.com/nyhan11
+https://blog.naver.com/0150a01
+https://blog.naver.com/twoniibubu
+https://blog.naver.com/kil8381
+https://blog.naver.com/w_gandalf
+https://blog.naver.com/hjlove0503
+https://blog.naver.com/hongchu_
+https://blog.naver.com/white7722
+https://blog.naver.com/soshinji
