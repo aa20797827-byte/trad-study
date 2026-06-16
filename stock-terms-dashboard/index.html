@@ -2223,26 +2223,31 @@ const QUOTES=[
   {ko:'"천천히 서두르라. (Festina Lente)"',sub:'— 아우구스투스 황제 · 빠르게 분석하되 진입은 신중하게. 서두름과 신중함의 균형이 핵심이다'},
   {ko:'"흔들리지 않는 마음이 최고의 기술이다."',sub:'— 미야모토 무사시 (오륜서) · 시장의 공포와 탐욕에 흔들리지 않는 평정심이 가장 강한 무기다'},
 ];
-let qIdx=Math.floor(Math.random()*QUOTES.length);
-// 셔플된 인덱스 배열로 완전 랜덤 순환 (같은 문구 연속 출력 방지)
-let qShuffled=[];
-function qNextShuffled(){
-  if(qShuffled.length===0){
-    qShuffled=Array.from({length:QUOTES.length},(_,i)=>i);
-    // Fisher-Yates 셔플
-    for(let i=qShuffled.length-1;i>0;i--){
+// ── 명언 완전 랜덤 셔플 ──
+const _qDeck={
+  _pile:[],
+  _last:-1,
+  _fill(){
+    // 전체 인덱스 배열 생성
+    this._pile=Array.from({length:QUOTES.length},(_,i)=>i);
+    // Fisher-Yates 완전 셔플
+    for(let i=this._pile.length-1;i>0;i--){
       const j=Math.floor(Math.random()*(i+1));
-      [qShuffled[i],qShuffled[j]]=[qShuffled[j],qShuffled[i]];
+      const tmp=this._pile[i];this._pile[i]=this._pile[j];this._pile[j]=tmp;
     }
-    // 현재 표시 중인 것과 첫 번째가 같으면 맨 뒤로 이동
-    if(qShuffled[0]===qIdx&&qShuffled.length>1){
-      qShuffled.push(qShuffled.shift());
+    // 직전 문구가 맨 앞에 오면 뒤로 밀기 (연속 같은 문구 방지)
+    if(this._pile.length>1&&this._pile[0]===this._last){
+      this._pile.push(this._pile.shift());
     }
+  },
+  next(){
+    if(this._pile.length===0)this._fill();
+    this._last=this._pile.shift();
+    return this._last;
   }
-  qIdx=qShuffled.shift();
-}
-let qSec=60;
-let qTimer=null;
+};
+let qIdx=_qDeck.next();
+let qSec=60,qTimer=null;
 function showQuote(){
   const q=QUOTES[qIdx];
   const ko=document.getElementById('quote-ko');
@@ -2253,24 +2258,17 @@ function showQuote(){
 function updateQTimer(){
   const ring=document.getElementById('qtimer-ring');
   const txt=document.getElementById('qtimer-text');
-  const pct=qSec/60;
-  const circ=69.1;
-  if(ring)ring.style.strokeDashoffset=circ*(1-pct);
-  if(txt){const s=qSec;txt.textContent='0:'+(s<10?'0':'')+s;}
+  if(ring)ring.style.strokeDashoffset=69.1*(1-qSec/60);
+  if(txt)txt.textContent='0:'+(qSec<10?'0':'')+qSec;
   qSec--;
-  if(qSec<0){
-    qSec=60;
-    qNextShuffled();
-    showQuote();
-  }
+  if(qSec<0){qSec=60;qIdx=_qDeck.next();showQuote();}
 }
 function initQuotes(){
-  qNextShuffled();
   showQuote();
   qTimer=setInterval(updateQTimer,1000);
   const banner=document.getElementById('quote-banner');
   if(banner)banner.addEventListener('click',()=>{
-    qNextShuffled();qSec=60;showQuote();updateQTimer();
+    qIdx=_qDeck.next();qSec=60;showQuote();updateQTimer();
   });
 }
 
