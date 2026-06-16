@@ -157,7 +157,7 @@ header{background:linear-gradient(135deg,#0d1f3a,#0a0f1e);border-bottom:1px soli
 ::-webkit-scrollbar{width:5px;height:5px;}
 ::-webkit-scrollbar-track{background:var(--bg);}
 ::-webkit-scrollbar-thumb{background:var(--bd);border-radius:3px;}
-@media(max-width:640px){.grid{grid-template-columns:1fr;}.main,.searchbar,.modebar,.tabs,header{padding-left:14px;padding-right:14px;}}
+/* mobile styles → comprehensive block near end of style */
 
 /* ─ FAVORITES ─ */
 .fav-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 5px;margin-left:auto;color:var(--mt);transition:all .2s;line-height:1;border-radius:5px;flex-shrink:0;}
@@ -202,7 +202,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 .qzen2{font-size:12px;color:var(--mt);margin-bottom:12px;}
 .qzdesc2{font-size:13px;color:var(--mt);line-height:1.6;padding:10px 12px;background:var(--s2);border-radius:8px;}
 .qzopts{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
-@media(max-width:500px){.qzopts{grid-template-columns:1fr;}}
+/* qzopts mobile → handled in comprehensive block */
 .qzopt{padding:13px 14px;background:var(--s1);border:2px solid var(--bd);border-radius:10px;cursor:pointer;font-size:13px;font-weight:600;text-align:left;color:var(--tx);transition:all .2s;line-height:1.4;}
 .qzopt:hover:not(:disabled){border-color:var(--ac);background:var(--s2);}
 .qzopt.correct{border-color:var(--gn)!important;background:rgba(34,197,94,.12)!important;color:var(--gn)!important;}
@@ -418,7 +418,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 .ta-rule-item{font-size:11px;color:var(--mt);line-height:1.7;display:flex;gap:6px;}
 .ta-rule-dot{width:4px;height:4px;border-radius:50%;background:#22c55e;margin-top:6px;flex-shrink:0;}
 .ta-expert-warn{background:rgba(239,68,68,.06);border:1px solid rgba(239,68,68,.2);border-radius:10px;padding:10px 14px;font-size:11px;color:#fca5a5;line-height:1.7;}
-@media(max-width:600px){.ta-fig{min-width:100%;}.ta-figs{flex-direction:column;}}
+/* ta-figs mobile → handled in comprehensive block */
 /* ROADMAP */
 .rm-hero{text-align:center;padding:28px 0 20px;margin-bottom:24px;}
 .rm-hero h2{font-size:22px;font-weight:900;color:var(--tx);}
@@ -497,6 +497,244 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 .log-lbl{font-size:9px;color:var(--mt);}
 .log-cnt{font-size:10px;color:var(--ac);font-weight:700;}
 .log-section-hd{font-size:12px;font-weight:700;color:var(--mt);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px;}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE BOTTOM NAV
+   ══════════════════════════════════════════════════════════════ */
+.mob-nav{
+  display:none;
+  position:fixed;bottom:0;left:0;right:0;
+  height:60px;
+  background:var(--s1);
+  border-top:2px solid var(--bd);
+  z-index:300;
+  align-items:stretch;
+}
+.mob-nav-btn{
+  flex:1;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;border:none;background:none;
+  color:var(--mt);cursor:pointer;
+  padding:6px 2px 8px;
+  font-size:20px;
+  transition:color .15s,background .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.mob-nav-btn span{font-size:9px;font-weight:700;letter-spacing:.1px;line-height:1;}
+.mob-nav-btn.on{color:var(--ac);}
+.mob-nav-btn.on::after{content:'';display:block;width:18px;height:3px;border-radius:2px;background:var(--ac);margin-top:1px;}
+
+/* ══════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — 640px 이하
+   ══════════════════════════════════════════════════════════════ */
+@media(max-width:640px){
+
+  /* ─ GLOBAL ─ */
+  body{padding-bottom:64px;}
+
+  /* ─ HEADER ─ */
+  header{
+    padding:10px 14px;
+    gap:8px;
+  }
+  .hicon{width:36px;height:36px;font-size:17px;border-radius:9px;flex-shrink:0;}
+  .htitle h1{font-size:15px;}
+  .htitle p{display:none;}
+  .hstats{gap:5px;flex-wrap:nowrap;}
+  .sball{padding:4px 8px;min-width:0;}
+  .sball .n{font-size:13px;}
+  .sball .l{font-size:9px;}
+  .streak{padding:4px 8px;gap:4px;}
+  .streak .sn{font-size:13px;}
+  .streak .sl{font-size:9px;}
+  .thmbtn{padding:5px 8px;font-size:14px;}
+
+  /* ─ QUOTE BANNER ─ */
+  .quote-banner{padding:7px 14px;}
+  .quote-ko{font-size:12px;}
+  .quote-sub{display:none;}
+
+  /* ─ SEARCH ─ */
+  .searchbar{padding:8px 14px;}
+  .sinput{font-size:13px;padding:9px 14px;}
+
+  /* ─ LEVEL BAR ─ */
+  .lvbar{
+    padding:5px 14px;
+    gap:4px;
+    overflow-x:auto;
+    flex-wrap:nowrap;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .lvbar::-webkit-scrollbar{display:none;}
+  .lvbtn{padding:4px 10px;font-size:10px;white-space:nowrap;flex-shrink:0;}
+  .lvbar-label{font-size:10px;flex-shrink:0;}
+
+  /* ─ TABS ─ */
+  .tabs{
+    padding:0 14px;
+    -webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
+  }
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{padding:10px 11px;font-size:11px;gap:3px;}
+  .tcnt{font-size:9px;padding:1px 5px;}
+
+  /* ─ NAV (mode buttons) ─ */
+  .navwrap{padding:6px 14px;gap:4px;}
+  .navrow{gap:4px;min-height:30px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .navrow::-webkit-scrollbar{display:none;}
+  .mbtn{
+    padding:5px 10px;
+    font-size:10.5px;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+  .navlbl{font-size:9px;padding:2px 7px;flex-shrink:0;}
+  .navsep{display:none;}
+  .finfo{display:none;}
+
+  /* ─ MAIN & GRID ─ */
+  .main{padding:12px 14px;}
+  .grid{grid-template-columns:1fr;gap:10px;}
+
+  /* ─ CARDS ─ */
+  .card{border-radius:12px;}
+  .card-top{padding:13px 13px 0;}
+  .card-name{font-size:15px;}
+  .card-en{font-size:10px;}
+  .card-sum{font-size:12px;line-height:1.6;}
+  .detail{padding:12px 13px;}
+  .sec-hd{font-size:10px;}
+  .sec-body{font-size:12px;line-height:1.7;}
+  .pts li{font-size:12px;padding-left:18px;}
+  .fmbox{font-size:11px;padding:8px 11px;}
+  .exbox,.warnbox{font-size:11px;padding:9px 12px;}
+
+  /* ─ LIST VIEW ─ */
+  .li-top{padding:10px 13px;gap:10px;}
+  .li-ko{font-size:14px;}
+  .li-en{font-size:10px;}
+  .li-sum{font-size:11px;}
+  .li-detail{padding:0 13px 12px 48px;}
+
+  /* ─ FLASHCARD ─ */
+  .fcwrap{padding:12px 14px;}
+  .fc{padding:24px 16px;min-height:230px;border-radius:14px;}
+  .fterm{font-size:22px;}
+  .fen{font-size:13px;}
+  .fsum{font-size:13px;}
+  .fdesc{font-size:12px;}
+  .fcbtns{gap:7px;}
+  .fcb{padding:9px 14px;font-size:12px;border-radius:8px;}
+
+  /* ─ QUIZ ─ */
+  .qzwrap{padding:12px 14px;}
+  .qzq{padding:16px 14px 12px;border-radius:12px;}
+  .qzterm{font-size:18px;}
+  .qzen2{font-size:11px;}
+  .qzdesc2{font-size:12px;padding:9px 11px;}
+  .qzopts{grid-template-columns:1fr;gap:8px;}
+  .qzopt{padding:11px 12px;font-size:12px;border-radius:9px;}
+  .qzfb{font-size:12px;padding:10px 12px;}
+  .qznxt{padding:11px;font-size:13px;}
+  .qzscore{gap:12px;font-size:11px;}
+  .qzresult{padding:28px 16px;}
+  .qzresult .score-big{font-size:44px;}
+
+  /* ─ SPACED REPETITION ─ */
+  .srwrap{padding:12px 14px;}
+  .srcard{padding:20px 14px;min-height:170px;border-radius:12px;}
+  .sr-term{font-size:22px;}
+  .sr-en{font-size:12px;}
+  .sr-sum{font-size:13px;}
+  .sr-ratings{grid-template-columns:repeat(4,1fr);gap:5px;}
+  .srb{padding:8px 3px;font-size:10px;}
+  .sr-info{font-size:10px;}
+
+  /* ─ CONCEPT MAP ─ */
+  .mapwrap{padding:12px 14px;}
+  .map-container{grid-template-columns:1fr;}
+  .map-node{padding:13px;}
+
+  /* ─ TOP-DOWN VIEW ─ */
+  .tdwrap{padding:12px 14px;}
+  .td-hero h2{font-size:17px;}
+  .td-hero p{font-size:12px;}
+  /* 4단계 프레임워크: 세로 스택 */
+  .td-steps-wrap{
+    grid-template-columns:1fr !important;
+    gap:8px;
+  }
+  .td-arrow-col{display:none;}
+  .td-step{padding:12px 13px;border-radius:10px;}
+  .td-step-title{font-size:12px;}
+  .td-step-items{font-size:10px;}
+  /* 경기사이클 */
+  .cy-tabs{gap:6px;}
+  .cy-tab{min-width:72px;font-size:12px;padding:8px 6px;}
+  .cy-detail{grid-template-columns:1fr;gap:12px;}
+  .cy-strategy{grid-column:auto;}
+  .cy-desc{grid-column:auto;}
+  /* 인터마켓 */
+  .flow-grid{grid-template-columns:1fr;}
+  /* KR지표 */
+  .kr-grid{grid-template-columns:1fr;}
+  /* 루틴·툴 */
+  .routine-grid{grid-template-columns:1fr;}
+  .tool-grid{grid-template-columns:1fr;}
+  /* 섹터매트릭스 */
+  .sector-matrix{font-size:10px;}
+  .sector-matrix th,.sector-matrix td{padding:5px 7px;}
+
+  /* ─ TA EXPERT ─ */
+  .ta-hero h2{font-size:18px;}
+  .ta-hero p{font-size:12px;}
+  .ta-tab-bar{gap:4px;padding-bottom:8px;margin-bottom:12px;}
+  .ta-tab-btn{padding:6px 11px;font-size:10.5px;}
+  .ta-expert-sec{padding:13px;margin-bottom:18px;border-radius:12px;}
+  .ta-expert-title{font-size:14px;}
+  .ta-expert-desc{font-size:11px;line-height:1.75;}
+  .ta-figs{flex-direction:column;gap:8px;margin-bottom:10px;}
+  .ta-fig{min-width:100%;max-width:100%;}
+  .ta-fig figcaption{font-size:9px;}
+  .ta-expert-rules{padding:10px 11px;margin-bottom:8px;}
+  .ta-rules-title{font-size:10px;}
+  .ta-rule-item{font-size:10px;line-height:1.6;}
+  .ta-expert-warn{padding:9px 11px;font-size:10px;}
+
+  /* ─ ROADMAP ─ */
+  .rm-hero h2{font-size:17px;}
+  .rm-topics{grid-template-columns:1fr;}
+  .rm-level-hdr{padding:12px 14px;}
+  .rm-level-body{padding:0 14px 14px;}
+
+  /* ─ MODALS ─ */
+  .modal-ov{padding:14px;}
+  .modal-box{padding:16px;border-radius:14px;max-height:88vh;}
+  .modal-hd h2{font-size:15px;}
+  .total-stat .big{font-size:36px;}
+
+  /* ─ SCROLL TOP ─ */
+  #scrollTop{bottom:72px;right:14px;width:40px;height:40px;font-size:17px;}
+
+  /* ─ STUDY LOG ─ */
+  .log-bar{width:100%;}
+  .log-lbl{font-size:8px;}
+  .log-cnt{font-size:9px;}
+
+  /* ─ MOBILE NAV SHOW ─ */
+  .mob-nav{display:flex;}
+}
+
+@media(max-width:500px){
+  .qzopts{grid-template-columns:1fr;}
+  .hstats .sball:nth-child(n+4):not(:last-child){display:none;}
+}
+@media(min-width:641px){
+  .mob-nav{display:none;}
+}
 </style>
 </head>
 <body>
@@ -3936,6 +4174,7 @@ function setMode(m){
   document.querySelectorAll('.mbtn[data-m]').forEach(x=>x.classList.remove('on'));
   const active=document.querySelector(`.mbtn[data-m="${m}"]`);
   if(active)active.classList.add('on');
+  document.querySelectorAll('.mob-nav-btn').forEach(b=>b.classList.toggle('on',b.dataset.m===m));
   const mn=document.getElementById('main'),fw=document.getElementById('fcwrap');
   const qz=document.getElementById('qzwrap'),sr=document.getElementById('srwrap'),mp=document.getElementById('mapwrap'),td=document.getElementById('tdwrap');
   const ta=document.getElementById('tawrap'),rm=document.getElementById('roadmapwrap');
@@ -4010,5 +4249,14 @@ init();
 initQuotes();
 </script>
 <script src="ta-expert.js"></script>
+
+<!-- 모바일 하단 네비게이션 -->
+<nav class="mob-nav">
+  <button class="mob-nav-btn on" data-m="grid" onclick="setMode('grid')">📇<span>카드</span></button>
+  <button class="mob-nav-btn" data-m="flash" onclick="setMode('flash')">🃏<span>플래시</span></button>
+  <button class="mob-nav-btn" data-m="quiz" onclick="setMode('quiz')">🧠<span>퀴즈</span></button>
+  <button class="mob-nav-btn" data-m="ta" onclick="setMode('ta')">📈<span>기술분석</span></button>
+  <button class="mob-nav-btn" data-m="sr" onclick="setMode('sr')">📚<span>복습</span></button>
+</nav>
 </body>
 </html>
