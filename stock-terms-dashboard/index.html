@@ -3,7 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="주식 트레이딩 용어 완전 정복 — 기술적 분석, 기본적 분석, 파생상품, 투자전략까지 446개 용어를 플래시카드·퀴즈·스페이스드리피티션으로 학습">
+<meta name="keywords" content="주식용어,트레이딩,기술적분석,기본적분석,파생상품,투자전략,주식공부,PER,PBR,MACD,RSI">
+<meta property="og:title" content="트레이더 아카데미 — 주식 용어 완전 정복">
+<meta property="og:description" content="446개 주식·트레이딩 용어를 플래시카드·퀴즈·스페이스드리피티션으로 체계적으로 학습하세요.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#0a0f1e">
 <title>트레이더 아카데미</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
 <style>
 :root{--bg:#0a0f1e;--s1:#111827;--s2:#1e2a3a;--s3:#243044;--bd:#2d3f55;--tx:#e2e8f0;--mt:#7a93b0;--ac:#3b82f6;--ac2:#6366f1;--gn:#22c55e;--rd:#ef4444;--yw:#f59e0b;--pu:#a855f7;--cy:#06b6d4;--or:#f97316;}
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -133,6 +140,13 @@ header{background:linear-gradient(135deg,#0d1f3a,#0a0f1e);border-bottom:1px soli
 .fcscore{display:flex;gap:20px;justify-content:center;margin-top:12px;font-size:12px;color:var(--mt);}
 .fcscore .kv{color:var(--gn);font-weight:700;}
 .fcscore .dv{color:var(--rd);font-weight:700;}
+
+/* ─ PROGRESS BAR ─ */
+.prog-wrap{padding:6px 20px;background:var(--s1);border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:10px;}
+.prog-label{font-size:11px;color:var(--mt);white-space:nowrap;}
+.prog-bar{flex:1;height:6px;background:var(--bd);border-radius:3px;overflow:hidden;}
+.prog-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);border-radius:3px;transition:width .5s ease;}
+.prog-pct{font-size:11px;color:#4ade80;font-weight:700;min-width:36px;text-align:right;}
 
 /* ─ NO RESULTS ─ */
 .nores{text-align:center;padding:60px 20px;color:var(--mt);}
@@ -775,6 +789,20 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 @media(min-width:641px){
   .mob-nav{display:none;}
 }
+@media(min-width:641px) and (max-width:1024px){
+  .grid{grid-template-columns:repeat(2,1fr);}
+  .main{padding:14px 18px;}
+  .tabs{padding:0 18px;}
+  .searchbar{padding:10px 18px;}
+  .lvbar{padding:6px 18px;}
+  .navwrap{padding:8px 18px;}
+  header{padding:12px 18px;}
+  .fg-grid{grid-template-columns:1fr 1fr;}
+  .fg-2col{grid-template-columns:1fr 1fr;}
+  .qzopts{grid-template-columns:1fr 1fr;}
+  .card-name{font-size:16px;}
+  .htitle p{font-size:11px;}
+}
 </style>
 </head>
 <body>
@@ -808,6 +836,12 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
   </div>
 </div>
 <div class="searchbar"><input class="sinput" id="search" type="text" placeholder="🔍  용어 검색 — 한국어·영어·설명 모두 검색 가능"></div>
+<div class="prog-wrap">
+  <span class="prog-label">학습 진도</span>
+  <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  <span class="prog-pct" id="prog-pct">0%</span>
+  <span class="prog-label" id="prog-detail" style="margin-left:4px;"></span>
+</div>
 <div class="lvbar">
   <span class="lvbar-label">난이도</span>
   <button class="lvbtn on" data-lv="0">전체</button>
@@ -1053,6 +1087,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 <script src="terms19.js"></script>
 <script src="terms20.js"></script>
 <script src="terms21.js"></script>
+<script src="terms22.js"></script>
 <script src="usstocks.js"></script>
 <script src="krstocks.js"></script>
 <script>
@@ -1128,6 +1163,7 @@ function init(){
   updateFavCount();
   if(localStorage.getItem('theme')==='light'){document.body.classList.add('light');document.getElementById('thmbtn').textContent='🌙';}
   render();
+  updateProgressBar();
 }
 
 // ── FILTER ──
@@ -1349,7 +1385,7 @@ function flip(){document.getElementById('fc').classList.toggle('fl');}
 function shuffleFC(){fcArr=[...fcArr].sort(()=>Math.random()-.5);fcIdx=0;fcKn=0;fcDn=0;showFC();}
 function fnav(d){fcIdx=Math.max(0,Math.min(fcArr.length-1,fcIdx+d));showFC();}
 function fmark(k){
-  if(k){fcKn++;learned.add(fcArr[fcIdx].ko);localStorage.setItem('sl',JSON.stringify([...learned]));document.getElementById('lc').textContent=learned.size;trackStudy();}
+  if(k){fcKn++;learned.add(fcArr[fcIdx].ko);localStorage.setItem('sl',JSON.stringify([...learned]));document.getElementById('lc').textContent=learned.size;trackStudy();updateProgressBar();}
   else fcDn++;
   updateFcScore();
   if(fcIdx<fcArr.length-1)fnav(1);
@@ -1358,6 +1394,17 @@ function updateFcScore(){
   document.getElementById('fkn').textContent=fcKn;
   document.getElementById('fdn').textContent=fcDn;
   document.getElementById('frm').textContent=Math.max(0,fcArr.length-fcIdx-1);
+}
+function updateProgressBar(){
+  const total=TERMS.length;
+  const done=learned.size;
+  const pct=total>0?Math.round(done/total*100):0;
+  const pf=document.getElementById('prog-fill');
+  const pp=document.getElementById('prog-pct');
+  const pd=document.getElementById('prog-detail');
+  if(pf)pf.style.width=pct+'%';
+  if(pp)pp.textContent=pct+'%';
+  if(pd)pd.textContent=done+'/'+total;
 }
 
 // ── 퀴즈 모드 ──
@@ -1526,7 +1573,7 @@ function flipSR(){
 function rateSR(r){
   if(!srQ.length||srI>=srQ.length)return;
   updateSR(srQ[srI].ko,r);
-  if(r>=3){learned.add(srQ[srI].ko);localStorage.setItem('sl',JSON.stringify([...learned]));document.getElementById('lc').textContent=learned.size;}
+  if(r>=3){learned.add(srQ[srI].ko);localStorage.setItem('sl',JSON.stringify([...learned]));document.getElementById('lc').textContent=learned.size;updateProgressBar();}
   trackStudy();
   srI++;renderSRCard();
 }
