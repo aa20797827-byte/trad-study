@@ -850,6 +850,14 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
   <button class="lvbtn" data-lv="1">📗 초급</button>
   <button class="lvbtn" data-lv="2">📘 중급</button>
   <button class="lvbtn" data-lv="3">📕 고급</button>
+  <span style="flex:1"></span>
+  <button class="lvbtn" id="unlearned-btn" onclick="toggleUnlearnedOnly()" title="미학습 용어만 보기">🎯 미학습</button>
+  <select id="sort-sel" onchange="curSort=this.value;render()" style="padding:3px 7px;background:var(--s2);border:1px solid var(--bd);color:var(--mt);border-radius:14px;font-size:11px;cursor:pointer;font-weight:600">
+    <option value="default">기본순</option>
+    <option value="alpha">가나다순</option>
+    <option value="lv-asc">난이도↑</option>
+    <option value="lv-desc">난이도↓</option>
+  </select>
 </div>
 <div class="tabs" id="tabs">
   <button class="tab on" data-c="all">전체 <span class="tcnt" id="ca">0</span></button>
@@ -987,6 +995,15 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
           <option value="mix">랜덤 혼합</option>
         </select>
       </div>
+      <div>
+        <div style="font-size:13px;color:var(--mt);margin-bottom:8px">문제 풀</div>
+        <select id="qz-pool-sel" style="width:100%;padding:10px;background:var(--s2);border:1px solid var(--bd);color:var(--tx);border-radius:8px;font-size:14px">
+          <option value="all">전체 용어</option>
+          <option value="unlearned">미학습 용어만</option>
+          <option value="fav">즐겨찾기만</option>
+          <option value="wrong">오답 노트만</option>
+        </select>
+      </div>
       <button onclick="startQuiz()" style="padding:14px;background:var(--ac);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;margin-top:8px">퀴즈 시작 →</button>
     </div>
   </div>
@@ -1093,6 +1110,8 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 <script src="terms23.js"></script>
 <script src="terms24.js"></script>
 <script src="terms25.js"></script>
+<script src="terms26.js"></script>
+<script src="terms27.js"></script>
 <script src="usstocks.js"></script>
 <script src="krstocks.js"></script>
 <script>
@@ -1102,11 +1121,11 @@ const CICONS={basic:'📌',tech:'📊',fund:'💰',trade:'⚡',market:'🌐',opt
 const CCOLORS={basic:'#3b82f6',tech:'#22c55e',fund:'#f59e0b',trade:'#a855f7',market:'#06b6d4',options:'#f97316',global:'#ec4899',korean:'#84cc16',strategy:'#f43f5e',bond:'#8b5cf6'};
 const CLINKS={basic:['tech','fund','market'],tech:['basic','trade','market'],fund:['basic','strategy','trade'],trade:['tech','market','options'],market:['global','bond','strategy'],options:['trade','tech'],global:['bond','market','strategy'],korean:['basic','strategy','market'],strategy:['fund','bond','global'],bond:['global','market','strategy']};
 
-let curC='all',curM='grid',curLv=0,fcIdx=0,fcArr=[],fcKn=0,fcDn=0;
+let curC='all',curM='grid',curLv=0,fcIdx=0,fcArr=[],fcKn=0,fcDn=0,curSort='default';
 const learned=new Set(JSON.parse(localStorage.getItem('sl')||'[]'));
 const wrongNotes=new Set(JSON.parse(localStorage.getItem('wrong_notes')||'[]'));
 const favSet=new Set(JSON.parse(localStorage.getItem('fav_set')||'[]'));
-let showFavOnly=false;
+let showFavOnly=false,showUnlearnedOnly=false;
 let studyLog=JSON.parse(localStorage.getItem('study_log')||'{}');
 
 // ── 스페이스드 리피티션 (SM-2) ──
@@ -1174,13 +1193,24 @@ function init(){
 // ── FILTER ──
 function filt(){
   const q=document.getElementById('search').value.toLowerCase().trim();
-  return TERMS.filter(t=>{
+  let res=TERMS.filter(t=>{
     const cm=curC==='all'||t.cat===curC;
     const lm=curLv===0||t.lv===curLv;
     const fm=!showFavOnly||favSet.has(t.ko);
-    if(!q)return cm&&lm&&fm;
-    return cm&&lm&&fm&&(t.ko.toLowerCase().includes(q)||t.en.toLowerCase().includes(q)||t.sum.toLowerCase().includes(q)||(t.desc&&t.desc.toLowerCase().includes(q)));
+    const um=!showUnlearnedOnly||!learned.has(t.ko);
+    if(!q)return cm&&lm&&fm&&um;
+    return cm&&lm&&fm&&um&&(t.ko.toLowerCase().includes(q)||t.en.toLowerCase().includes(q)||t.sum.toLowerCase().includes(q)||(t.desc&&t.desc.toLowerCase().includes(q)));
   });
+  if(curSort==='alpha')res.sort((a,b)=>a.ko.localeCompare(b.ko,'ko'));
+  else if(curSort==='lv-asc')res.sort((a,b)=>a.lv-b.lv);
+  else if(curSort==='lv-desc')res.sort((a,b)=>b.lv-a.lv);
+  return res;
+}
+function toggleUnlearnedOnly(){
+  showUnlearnedOnly=!showUnlearnedOnly;
+  const btn=document.getElementById('unlearned-btn');
+  if(btn)btn.classList.toggle('on',showUnlearnedOnly);
+  render();
 }
 function lvLabel(n){return n===1?'초급':n===2?'중급':'고급';}
 
@@ -1442,7 +1472,12 @@ function startQuiz(){
   const qzLv=lvSel?parseInt(lvSel.value):0;
   qzTotal=cntSel?parseInt(cntSel.value):20;
   qzType=typeSel?typeSel.value:'desc';
+  const poolSel=document.getElementById('qz-pool-sel');
+  const qzPool=poolSel?poolSel.value:'all';
   let pool=TERMS.filter(t=>(qzCat==='all'||t.cat===qzCat)&&(qzLv===0||t.lv===qzLv));
+  if(qzPool==='unlearned')pool=pool.filter(t=>!learned.has(t.ko));
+  else if(qzPool==='fav')pool=pool.filter(t=>favSet.has(t.ko));
+  else if(qzPool==='wrong')pool=pool.filter(t=>wrongNotes.has(t.ko));
   if(!pool.length)pool=TERMS;
   qzAll=pool.sort(()=>Math.random()-.5);
   qzIdx=0;qzCorrect=0;qzAnswered=false;
