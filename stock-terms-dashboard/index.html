@@ -217,6 +217,8 @@ header{background:linear-gradient(135deg,#0d1f3a,#0a0f1e);border-bottom:1px soli
 .fav-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 5px;margin-left:auto;color:var(--mt);transition:all .2s;line-height:1;border-radius:5px;flex-shrink:0;}
 .fav-btn:hover{color:var(--yw);background:rgba(245,158,11,.1);}
 .fav-btn.on{color:var(--yw);}
+.copy-btn{background:none;border:none;cursor:pointer;font-size:13px;padding:2px 5px;color:var(--mt);transition:all .2s;line-height:1;border-radius:5px;flex-shrink:0;opacity:0.5;}
+.copy-btn:hover{opacity:1;background:var(--s2);}
 
 /* ─ RELATED TERMS ─ */
 .rel-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
@@ -1090,6 +1092,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 <script src="terms22.js"></script>
 <script src="terms23.js"></script>
 <script src="terms24.js"></script>
+<script src="terms25.js"></script>
 <script src="usstocks.js"></script>
 <script src="krstocks.js"></script>
 <script>
@@ -1194,6 +1197,7 @@ function buildCard(t){
       <span class="lbadge lv${t.lv}">${lvLabel(t.lv)}</span>
       ${isLn?'<span class="cbadge" style="background:rgba(34,197,94,.15);color:#4ade80">✓ 완료</span>':''}
       <button class="fav-btn${isFav?' on':''}" onclick="toggleFav('${koSafe}',event)" title="즐겨찾기에 추가">${isFav?'⭐':'☆'}</button>
+      <button class="copy-btn" onclick="copyTerm('${koSafe}',event)" title="클립보드 복사">📋</button>
     </div>
     <div class="card-name">${t.ko}</div>
     <div class="card-en">${t.en}</div>
@@ -1408,6 +1412,24 @@ function updateProgressBar(){
   if(pp)pp.textContent=pct+'%';
   if(pd)pd.textContent=done+'/'+total;
 }
+function copyTerm(ko,e){
+  if(e)e.stopPropagation();
+  const t=TERMS.find(x=>x.ko===ko);
+  if(!t)return;
+  const txt=`📌 ${t.ko} (${t.en})\n${t.sum}\n\n${t.desc}`;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const btn=e&&e.target;
+    if(btn){const orig=btn.textContent;btn.textContent='✓';setTimeout(()=>btn.textContent=orig,1200);}
+  }).catch(()=>{});
+}
+function resetLearned(){
+  if(!confirm(`학습 완료 기록 ${learned.size}개를 모두 초기화하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`))return;
+  learned.clear();
+  localStorage.removeItem('sl');
+  document.getElementById('lc').textContent=0;
+  updateProgressBar();
+  render();
+}
 
 // ── 퀴즈 모드 ──
 let qzAll=[],qzIdx=0,qzCorrect=0,qzAnswered=false,qzTotal=20,qzType='desc';
@@ -1460,25 +1482,25 @@ function showQQ(){
     document.getElementById('qzterm').textContent=t.ko;
     document.getElementById('qzen2').textContent=t.en;
     document.getElementById('qzdesc2').textContent='';
-    document.getElementById('qzopts-wrap').innerHTML=pool.map(o=>{
+    document.getElementById('qzopts-wrap').innerHTML=pool.map((o,i)=>{
       const txt=o.sum.length>60?o.sum.substring(0,58)+'…':o.sum;
-      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','desc')">${txt}</button>`;
+      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','desc')"><span style="opacity:.4;font-size:11px;margin-right:5px">${i+1}</span>${txt}</button>`;
     }).join('');
   }else if(qt==='en'){
     document.getElementById('qzlabel').textContent='이 용어의 영문명을 고르세요';
     document.getElementById('qzterm').textContent=t.ko;
     document.getElementById('qzen2').textContent='';
     document.getElementById('qzdesc2').textContent=t.sum;
-    document.getElementById('qzopts-wrap').innerHTML=pool.map(o=>{
-      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','en')">${o.en}</button>`;
+    document.getElementById('qzopts-wrap').innerHTML=pool.map((o,i)=>{
+      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','en')"><span style="opacity:.4;font-size:11px;margin-right:5px">${i+1}</span>${o.en}</button>`;
     }).join('');
   }else{
     document.getElementById('qzlabel').textContent='이 설명에 맞는 용어를 고르세요';
     document.getElementById('qzterm').textContent=t.sum;
     document.getElementById('qzen2').textContent='';
     document.getElementById('qzdesc2').textContent='';
-    document.getElementById('qzopts-wrap').innerHTML=pool.map(o=>{
-      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','ko')">${o.ko}</button>`;
+    document.getElementById('qzopts-wrap').innerHTML=pool.map((o,i)=>{
+      return `<button class="qzopt" onclick="answerQz(this,'${escQ(o.ko)}','${escQ(t.ko)}','ko')"><span style="opacity:.4;font-size:11px;margin-right:5px">${i+1}</span>${o.ko}</button>`;
     }).join('');
   }
 }
@@ -1717,7 +1739,7 @@ function showStats(){
     const p=tot?Math.round(dn/tot*100):0;
     html+=`<div class="stat-row"><div class="stat-top"><span class="stat-name">${CICONS[c]} ${CNAMES[c]}</span><span class="stat-nums">${dn}/${tot}개 (${p}%)</span></div><div class="stat-bar"><div class="stat-fill" style="width:${p}%"></div></div></div>`;
   });
-  html+='</div>';
+  html+='</div><div style="margin-top:16px;text-align:center"><button onclick="resetLearned();document.getElementById(\'stats-modal\').classList.add(\'hide\')" style="padding:8px 18px;background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:8px;font-size:12px;cursor:pointer">학습 기록 초기화</button></div>';
   document.getElementById('stats-content').innerHTML=html;
   document.getElementById('stats-modal').classList.remove('hide');
 }
@@ -4499,8 +4521,13 @@ document.querySelectorAll('.mbtn[data-m]').forEach(b=>b.addEventListener('click'
 document.getElementById('search').addEventListener('input',render);
 window.addEventListener('scroll',()=>document.getElementById('scrollTop').classList.toggle('vis',window.scrollY>320));
 document.addEventListener('keydown',e=>{
-  if(curM==='flash'){if(e.key==='ArrowLeft')fnav(-1);if(e.key==='ArrowRight')fnav(1);if(e.key===' ')flip();}
+  if(curM==='flash'){if(e.key==='ArrowLeft')fnav(-1);if(e.key==='ArrowRight')fnav(1);if(e.key===' '){e.preventDefault();flip();}}
   if(curM==='sr'&&e.key>='1'&&e.key<='4')rateSR(parseInt(e.key));
+  if(curM==='quiz'&&!qzAnswered&&e.key>='1'&&e.key<='4'){
+    const opts=document.querySelectorAll('#qzopts-wrap .qzopt:not(:disabled)');
+    const idx=parseInt(e.key)-1;
+    if(opts[idx])opts[idx].click();
+  }
 });
 
 init();
