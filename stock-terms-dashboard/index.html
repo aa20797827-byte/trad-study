@@ -219,6 +219,9 @@ header{background:linear-gradient(135deg,#0d1f3a,#0a0f1e);border-bottom:1px soli
 .fav-btn.on{color:var(--yw);}
 .copy-btn{background:none;border:none;cursor:pointer;font-size:13px;padding:2px 5px;color:var(--mt);transition:all .2s;line-height:1;border-radius:5px;flex-shrink:0;opacity:0.5;}
 .copy-btn:hover{opacity:1;background:var(--s2);}
+.viz-box{background:rgba(255,255,255,.03);border:1px solid var(--bd);border-radius:10px;padding:12px 8px;margin:10px 0 4px;text-align:center;overflow-x:auto;}
+.viz-box svg{display:block;margin:0 auto;max-width:100%;height:auto;}
+.viz-label{font-size:10px;color:var(--mt);margin-top:6px;text-align:center;}
 
 /* ─ RELATED TERMS ─ */
 .rel-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
@@ -1122,6 +1125,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 <script src="terms35.js"></script>
 <script src="terms36.js"></script>
 <script src="terms37.js"></script>
+<script src="terms38.js"></script>
 <script src="usstocks.js"></script>
 <script src="krstocks.js"></script>
 <script>
@@ -1245,6 +1249,7 @@ function buildCard(t){
   </div>
   <button class="exbtn" onclick="toggleCard(this)">자세히 보기 ▼</button>
   <div class="detail">
+    ${t.viz?`<div class="viz-box">${t.viz}</div>`:''}
     <div><div class="sec-hd">📖 개념 설명</div><div class="sec-body">${t.desc}</div></div>
     ${hasFm?`<div><div class="sec-hd">🔢 계산 공식</div><div class="fmbox">${t.form}</div></div>`:''}
     <div><div class="sec-hd">✅ 핵심 포인트</div><ul class="pts">${t.pts.map(p=>`<li>${p}</li>`).join('')}</ul></div>
@@ -4579,6 +4584,7 @@ init();
 initQuotes();
 </script>
 <script src="ta-expert.js"></script>
+<script src="terms_viz.js"></script>
 
 <!-- 모바일 하단 네비게이션 -->
 <nav class="mob-nav">
