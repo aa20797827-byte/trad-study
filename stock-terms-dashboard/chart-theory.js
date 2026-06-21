@@ -133,6 +133,35 @@ window._ctCalcPosition = function(){
 // ── 한국 주식 이름 검색 (TradingView Symbol Search) ──
 // ══════════════════════════════════════
 
+// 한글 종목명 → 코드 자동 변환 (Enter/분석 버튼 클릭 시)
+async function _ctResolveKoreanName(query){
+  var box = document.getElementById('ct-tv-box');
+  if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">⏳ "'+query+'" 검색 중...</div>';
+  try {
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ctrl.abort();}, 6000);
+    var url = 'https://symbol-search.tradingview.com/symbol_search/?text='+encodeURIComponent(query)+'&exchange=KRX&lang=ko&type=stock&country=KR';
+    var resp = await fetch(url, {signal:ctrl.signal});
+    clearTimeout(t);
+    if(!resp.ok) throw new Error('검색 실패');
+    var results = await resp.json();
+    if(results.length === 0){ throw new Error('"'+query+'" 검색 결과 없음'); }
+
+    if(results.length === 1){
+      // 결과 1개면 바로 로드
+      window._ctSelectSym(results[0].symbol);
+    } else {
+      // 결과 여러 개면 드롭다운 표시 (첫 번째 자동 선택 안 함)
+      var inp = document.getElementById('ct-sym-input');
+      if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">아래 종목을 선택하세요</div>';
+      _ctShowSuggest(results.slice(0,8), query);
+      if(inp) inp.focus();
+    }
+  } catch(e){
+    if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:13px">⚠ '+e.message+'</div>';
+  }
+}
+
 var _ctSearchTimer = null;
 
 // 입력값이 한글·영문 회사명이면 자동 검색
@@ -223,12 +252,18 @@ function initTV(){
 
 // ── 심볼 변경 ──
 window._ctChangeSymbol = function(){
-  var sym = document.getElementById('ct-sym-input').value.trim().toUpperCase();
+  var rawVal = document.getElementById('ct-sym-input').value.trim();
   var intSel = document.getElementById('ct-int-select');
   if(intSel) _ctInterval = intSel.value;
-  if(!sym) return;
-  // 숫자만 → 한국 주식 (KRX: 붙임)
-  // 영문 포함 → 미국주식/암호화폐: TradingView가 자동 해석하므로 그대로 사용
+  if(!rawVal) return;
+
+  // 한글 포함 → TradingView 심볼 검색으로 자동 변환
+  if(/[가-힣]/.test(rawVal)){
+    _ctResolveKoreanName(rawVal);
+    return;
+  }
+
+  var sym = rawVal.toUpperCase();
   if(/^\d+$/.test(sym)) sym = 'KRX:'+sym;
   _ctSymbol = sym; _tvLoaded = false;
   var box = document.getElementById('ct-tv-box');
