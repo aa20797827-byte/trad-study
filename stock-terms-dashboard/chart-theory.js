@@ -1,4 +1,4 @@
-// ═══ 차트 분석 도구 v3 ═══
+﻿// ═══ 차트 분석 도구 v3 ═══
 // 체결→거래량→종가→사건봉→박스→도지→기능선→지지저항전환→매매시나리오
 
 (function(){
@@ -1239,117 +1239,131 @@ function computeIndicators(cl,op,hi,lo,vo,p){
 // ── 매매 근거 카드 ──
 function buildReasonCard(d, fp, ind, isBuyA, patterns){
   if(!ind) return '';
-  var pros=[], cons=[], cautions=[];
-  var cur=d.currentPrice, rsi=ind.rsi, mac=ind.macd, bb=ind.bb, s=ind.sma, vol=ind.vol, cdl=ind.candle;
+  var cur=d.currentPrice||0, rsi=ind.rsi, mac=ind.macd, bb=ind.bb;
+  var s2=ind.sma||{}, vol=ind.vol||{}, cdl=ind.candle;
+  var rsiDiv=ind.rsiDiv, macdCross=ind.macdCross, obvTrend=ind.obvTrend;
+  var multi=ind.multiCandle, devs=ind.devs||{};
 
-  // 구조론 신호
-  if(d.structure==='box'&&isBuyA)  pros.push('구조론: 박스 하단 지지 구간 — 과거 매수세가 집중됐던 합의 가격대. 시장 참여자들의 기억.');
-  if(d.structure==='box'&&!isBuyA) pros.push('구조론: 박스 상단 저항 구간 — 과거 매도세가 집중됐던 합의 가격대. 시장 참여자들의 기억.');
-  if(d.structure==='trend-up'&&isBuyA)  pros.push('구조론: 상승 추세 중 눌림 구간 — 추세 강도가 유효하면 리테스트 후 재상승 가능.');
-  if(d.structure==='trend-down'&&!isBuyA) pros.push('구조론: 하락 추세 중 되돌림 구간 — 추세 강도가 유효하면 리테스트 후 재하락 가능.');
+  function sec(title,col,lines){
+    if(!lines||!lines.length) return '';
+    return '<div style="margin-bottom:14px;padding:13px 14px;background:'+col+'0a;border-left:3px solid '+col+';border-radius:0 10px 10px 0">'
+      +'<div style="font-size:12px;font-weight:800;color:'+col+';margin-bottom:8px">'+title+'</div>'
+      +'<div style="font-size:12px;color:var(--tx);line-height:1.85">'
+      +lines.map(function(l){return '• '+l;}).join('<br>')
+      +'</div></div>';
+  }
 
-  // RSI
+  var sections=[], totalSig=0, posSig=0;
+
+  // 1. 구조론 근거
+  var strLines=[], bu=d.boxUpper||0, bl=d.boxLower||0, bc=d.boxClose||0;
+  var du=d.dojiUpper||0, dl=d.dojiLower||0, dc=d.dojiClose||0;
+  if(bc&&bl){
+    strLines.push('1차 매수 '+fp(bc)+': 박스 내 다수 종가가 집중된 합의가격대. 많은 참여자의 평균 진입가 → 매수세 재유입 가능성 높음.');
+    strLines.push('2차 매수 '+fp(bl)+': 박스 하단 = 매수·매도세 충돌 경계선. 기억된 매수세가 이 가격대를 지지.');
+    strLines.push('손절 '+fp(Math.round(bl*0.985))+': 박스 하단 종가 이탈 시 지지→저항 전환 확정. 진입 근거 소멸 → 즉시 손절.');
+    totalSig+=2; posSig+=2;
+  } else if(dc&&dl){
+    strLines.push('도지 종가 '+fp(dc)+': 압축된 전장의 합의가격. 시장 참여자 평균 진입가로 매수 지지력 높음.');
+    strLines.push('도지 하단 '+fp(dl)+': 매수세 흔적이 남은 경계선. 기억된 매수세 재유입 가능.');
+    totalSig+=2; posSig+=1;
+  }
+  if(strLines.length) sections.push(sec('📌 구조론 (차트술사) 매수 근거','#f59e0b',strLines));
+
+  // 2. 이동평균선
+  var maLines=[];
+  if(s2.s20||s2.s60){
+    var s20=s2.s20, s60=s2.s60||s2.s50;
+    if(s20) maLines.push('SMA20 = '+fp(Math.round(s20))+(devs.s20?' (이격 '+(devs.s20>0?'+':'')+devs.s20.toFixed(1)+'%)':'')
+      +' | 현재가 '+(cur>s20?'<b style="color:#22c55e">위 (단기 상승)</b>':'<b style="color:#ef4444">아래 (단기 조정)</b>'));
+    if(s60) maLines.push('SMA60 = '+fp(Math.round(s60))+(devs.s60?' (이격 '+(devs.s60>0?'+':'')+devs.s60.toFixed(1)+'%)':'')
+      +' | 현재가 '+(cur>s60?'<b style="color:#22c55e">위</b>':'<b style="color:#ef4444">아래</b>'));
+    if(s20&&s60){
+      if(s20>s60){ maLines.push('<b style="color:#22c55e">MA 정배열 (골든크로스)</b> — SMA20>SMA60. 중기 상승 추세 유효. 눌림 매수 관점 강화.'); totalSig++; posSig++; }
+      else{ maLines.push('<b style="color:#f59e0b">MA 역배열 (데드크로스)</b> — SMA20<SMA60. 추세 역행 매수. 볼린저 하단·RSI 과매도 동반 시에만 진입 권장.'); totalSig++; }
+    }
+    if(s2.s5&&s20){
+      var c5=(s2.s5>s20)?'#22c55e':'#f59e0b';
+      maLines.push('단기: <b style="color:'+c5+'">'+(s2.s5>s20?'5MA>20MA (단기 골든크로스)':'5MA<20MA (단기 데드크로스)')+'</b>');
+      totalSig++; if(s2.s5>s20)posSig++;
+    }
+    if(maLines.length) sections.push(sec('📈 이동평균선 (MA)','#60a5fa',maLines));
+  }
+
+  // 3. RSI + 다이버전스
   if(rsi!==null&&rsi!==undefined){
-    if(isBuyA&&rsi<35)  pros.push('RSI '+rsi+' → 과매도 영역(30 이하). 기술적 반등 확률 높음. 저점 매수 신호.');
-    else if(isBuyA&&rsi<45) pros.push('RSI '+rsi+' → 중립 하방, 과매도 접근 중. 30 이하 진입 시 반등 신호 강화.');
-    else if(isBuyA&&rsi>65) cons.push('RSI '+rsi+' → 과매수 영역. 매수 진입 타이밍으로 부적합. 조정 후 진입 권장.');
-    else if(isBuyA&&rsi>55) cautions.push('RSI '+rsi+' → 중립 상방. 추가 상승 여지가 제한적. 진입 가격대 조정 고려.');
-    if(!isBuyA&&rsi>65) pros.push('RSI '+rsi+' → 과매수 영역(70 이상). 단기 조정 확률 높음. 고점 매도 신호.');
-    else if(!isBuyA&&rsi>55) pros.push('RSI '+rsi+' → 중립 상방. 추가 상승 압력 주의하되 구조론 저항과 겹치면 매도 근거.');
-    else if(!isBuyA&&rsi<35) cons.push('RSI '+rsi+' → 과매도. 매도 진입은 위험. 반등 가능성 높음.');
+    var rLines=[], rC=rsi<30?'#22c55e':rsi>70?'#ef4444':'#f59e0b';
+    var rLabel=rsi<30?'과매도 — 기술적 반등 확률 높음':rsi<40?'저권역 — 매수 유리 구간':rsi<50?'중립 하방 — 조정 중':rsi<60?'중립 상방':'과매수 영역';
+    rLines.push('RSI(14) = <b style="color:'+rC+'">'+rsi+'</b> — '+rLabel);
+    if(rsi<30){ rLines.push('RSI 30 이하 과매도 구간. 단기 반등 확률 높음. 1차 매수 적기.'); totalSig++; posSig++; }
+    else if(rsi<40){ rLines.push('RSI 저권역. 추가 하락 여지 있으나 매수 우위 구간 진입 중.'); totalSig++; posSig++; }
+    else if(rsi>70){ rLines.push('과매수 영역. 매수 비중 30~50%로 제한 권장.'); totalSig++; }
+    else if(rsi>60){ rLines.push('상승권. 과열 주의. 매수 비중 75% 이하.'); totalSig++; }
+    if(rsiDiv==='bullish'){ rLines.push('<b style="color:#22c55e">★ RSI 강세 다이버전스</b> — 가격은 신저점이나 RSI는 상승. 상승 반전 선행 신호. 매수 근거 크게 강화.'); totalSig++; posSig++; }
+    if(rsiDiv==='bearish'){ rLines.push('<b style="color:#f59e0b">★ RSI 약세 다이버전스</b> — 가격은 신고점이나 RSI는 하락. 하락 반전 주의. 매수 비중 축소.'); totalSig++; }
+    sections.push(sec('⚡ RSI (14일 상대강도지수)','#a855f7',rLines));
   }
 
-  // MACD
+  // 4. MACD
   if(mac){
-    if(isBuyA&&mac.hist>0)  pros.push('MACD 히스토그램 +'+mac.hist+' → 매수 모멘텀 형성. 구조론 매수 신호 강화.');
-    else if(isBuyA&&mac.hist<0&&mac.line<0) cautions.push('MACD 음권('+mac.hist+') → 아직 하락 모멘텀. 박스 하단 지지 확인 후 진입.');
-    else if(isBuyA&&mac.hist<0&&mac.hist>mac.line*0.5) pros.push('MACD 히스토그램 개선 중('+mac.hist+') → 하락 모멘텀 약화, 반전 신호 탐색.');
-    if(!isBuyA&&mac.hist<0) pros.push('MACD 히스토그램 '+mac.hist+' → 매도 모멘텀 형성. 구조론 매도 신호 강화.');
-    else if(!isBuyA&&mac.hist>0) cautions.push('MACD 히스토그램 +'+mac.hist+' → 아직 매수 모멘텀. 박스 상단 저항 확인 후 매도.');
+    var mLines=[], mC=mac.hist>0?'#22c55e':'#ef4444';
+    mLines.push('MACD = '+(mac.line>0?'+':'')+mac.line
+      +' | 시그널 = '+(mac.signal>0?'+':'')+mac.signal
+      +' | 히스토그램 = <b style="color:'+mC+'">'+(mac.hist>0?'+':'')+mac.hist+'</b>');
+    if(macdCross==='golden'){ mLines.push('<b style="color:#22c55e">★ MACD 골든크로스 발생</b> — MACD가 시그널 상향 돌파. 매수 모멘텀 전환 확인.'); totalSig++; posSig++; }
+    else if(macdCross==='dead'){ mLines.push('<b style="color:#f59e0b">★ MACD 데드크로스 발생</b> — 매도 모멘텀 전환. 구조론 지지 확인 후 신중 진입.'); totalSig++; }
+    else if(mac.hist>0&&mac.line>0){ mLines.push('<b style="color:#22c55e">MACD 양권 + 히스토그램 플러스</b> — 매수 모멘텀 확인. 매수 근거 강화.'); totalSig++; posSig++; }
+    else if(mac.hist<0&&mac.hist>mac.signal*0.5){ mLines.push('MACD 히스토그램 <b style="color:#22c55e">개선 중</b> — 하락 모멘텀 약화. 반전 준비 신호.'); totalSig++; posSig++; }
+    else if(mac.hist<0){ mLines.push('MACD 음권 — 하락 모멘텀 지속. 히스토그램 개선 확인 후 매수 검토.'); totalSig++; }
+    sections.push(sec('📊 MACD (12, 26, 9)','#f59e0b',mLines));
   }
 
-  // 볼린저 밴드
-  if(bb){
-    if(isBuyA&&cur<=bb.lower*1.02)  pros.push('볼린저 밴드 하단('+fp(Math.round(bb.lower))+') 근처 → 단기 과매도 구간. 반등 탐색 신호.');
-    else if(isBuyA&&cur>=bb.upper*0.98) cons.push('볼린저 밴드 상단('+fp(Math.round(bb.upper))+') 근처 → 과매수. 매수 진입 시 단기 조정 위험.');
-    if(!isBuyA&&cur>=bb.upper*0.98) pros.push('볼린저 밴드 상단('+fp(Math.round(bb.upper))+') 근처 → 단기 과매수. 조정 신호.');
-    else if(!isBuyA&&cur<=bb.lower*1.02) cons.push('볼린저 밴드 하단('+fp(Math.round(bb.lower))+') 근처 → 과매도. 매도 진입 시 반등 위험.');
-    var bw=Math.round((bb.upper-bb.lower)/bb.middle*100);
-    if(bw<8) cautions.push('볼린저 밴드 극도 수렴(폭 '+bw+'%) → 큰 방향성 이탈 임박. 이탈 방향 확인 후 거래 권장.');
+  // 5. 볼린저밴드
+  if(bb&&cur){
+    var bLines=[];
+    var bpct=bb.upper>bb.lower?Math.round((cur-bb.lower)/(bb.upper-bb.lower)*100):50;
+    var bw=bb.middle>0?Math.round((bb.upper-bb.lower)/bb.middle*100):0;
+    bLines.push('상단 '+fp(Math.round(bb.upper))+' | 중선 '+fp(Math.round(bb.middle))+' | 하단 '+fp(Math.round(bb.lower))+'  /  현재가 밴드 내 <b style="color:#60a5fa">'+bpct+'%</b>');
+    if(cur<=bb.lower*1.02){ bLines.push('<b style="color:#22c55e">밴드 하단 근처 — 과매도 확인.</b> 반등 탐색 구간. 매수 신뢰도 강화.'); totalSig++; posSig++; }
+    else if(cur>=bb.upper*0.98){ bLines.push('<b style="color:#f59e0b">밴드 상단 근처 — 단기 과매수.</b> 매수 비중 50% 이하 권장.'); totalSig++; }
+    else if(cur>bb.middle){ bLines.push('중선 위 상승 편향. 상단('+fp(Math.round(bb.upper))+')까지 +'+Math.round((bb.upper-cur)/cur*100)+'% 여지.'); }
+    else{ bLines.push('중선 아래 하락 편향. 중선('+fp(Math.round(bb.middle))+') 회복이 매수 신호 확인의 관건.'); }
+    if(bw>0&&bw<8){ bLines.push('<b style="color:#f97316">밴드 극도 수렴 (폭 '+bw+'%)</b> — 큰 방향성 이탈 임박.'); totalSig++; posSig++; }
+    else if(bw>0&&bw<15){ bLines.push('밴드 수렴 (폭 '+bw+'%) — 방향 탐색 중.'); }
+    sections.push(sec('📏 볼린저밴드 (20일, ±2σ)','#06b6d4',bLines));
   }
 
-  // MA
-  if(s.s20&&s.s60){
-    if(isBuyA&&s.s20>s.s60) pros.push('MA 정배열(SMA20>SMA60, 골든크로스) → 중기 상승 추세 유효. 눌림 매수 신뢰도 상승.');
-    else if(isBuyA&&s.s20<s.s60) cautions.push('MA 역배열(데드크로스) → 중기 하락 추세 중. 반등이 추세 전환인지 추가 확인 필요.');
-    if(!isBuyA&&s.s20<s.s60) pros.push('MA 역배열(SMA20<SMA60, 데드크로스) → 중기 하락 추세 유효. 되돌림 매도 신뢰도 상승.');
-    else if(!isBuyA&&s.s20>s.s60) cautions.push('MA 정배열 → 중기 상승 추세 중. 저항이 추세 전환인지 확인 필요.');
-  }
-
-  // 거래량
-  if(vol.cur&&vol.avg){
+  // 6. 거래량 + OBV
+  if(vol.avg&&vol.cur){
     var vr=Math.round(vol.cur/vol.avg*10)/10;
-    if(isBuyA&&vr<0.7)   pros.push('거래량 감소(평균 대비 '+vr+'배) → 눌림 중 매도 압력 약화. 바닥 탐색의 긍정 신호.');
-    else if(isBuyA&&vr>2) cautions.push('거래량 급증('+vr+'배) → 매도 압력도 강할 수 있음. 방향 확인 필요.');
-    if(!isBuyA&&vr<0.7)  pros.push('거래량 감소('+vr+'배) → 반등 중 매수 압력 약화. 되돌림 매도 타점 접근.');
-    else if(!isBuyA&&vr>2) cautions.push('거래량 급증('+vr+'배) → 매수 압력도 강할 수 있음. 방향 확인 필요.');
+    var vC=vr>1.8?'#f59e0b':vr>1.2?'#22c55e':'#6b7280';
+    var vLines=['60일 평균 대비 <b style="color:'+vC+'">'+vr+'배</b>'];
+    if(vr<0.6){ vLines.push('<b style="color:#22c55e">거래량 감소 ('+vr+'배)</b> — 눌림 중 매도 압력 약화. 에너지 재충전 신호. 매수 근거 강화.'); totalSig++; posSig++; }
+    else if(vr>1.8){ vLines.push('거래량 급증 ('+vr+'배) — 수급 집중. 방향 확인 필요.'); totalSig++; }
+    if(obvTrend==='up'){ vLines.push('<b style="color:#22c55e">OBV 상승</b> — 가격 선행 자금 유입. 상승 추세 뒷받침.'); totalSig++; posSig++; }
+    if(obvTrend==='down'){ vLines.push('<b style="color:#f59e0b">OBV 하락</b> — 가격 선행 자금 이탈 중. 거래량 동반 상승 필수 확인.'); totalSig++; }
+    sections.push(sec('📊 거래량 & OBV','#84cc16',vLines));
   }
 
-  // 캔들 패턴
-  if(cdl&&cdl.name){
-    if(isBuyA&&cdl.sentiment==='bullish') pros.push('캔들 패턴: '+cdl.name+' → '+cdl.desc);
-    else if(isBuyA&&cdl.sentiment==='bearish') cautions.push('캔들 패턴: '+cdl.name+' → '+cdl.desc);
-    else if(!isBuyA&&cdl.sentiment==='bearish') pros.push('캔들 패턴: '+cdl.name+' → '+cdl.desc);
-    else if(!isBuyA&&cdl.sentiment==='bullish') cautions.push('캔들 패턴: '+cdl.name+' → '+cdl.desc);
-  }
-
-  // 차트 패턴
-  if(patterns&&patterns.length){
-    patterns.forEach(function(pt){
-      if(isBuyA&&pt.type==='bullish')  pros.push('차트 패턴 감지: '+pt.name+' — '+pt.desc);
-      else if(isBuyA&&pt.type==='bearish')  cons.push('차트 패턴 경고: '+pt.name+' — 상방 진입 전 주의.');
-      else if(!isBuyA&&pt.type==='bearish') pros.push('차트 패턴 감지: '+pt.name+' — '+pt.desc);
-      else if(!isBuyA&&pt.type==='bullish') cons.push('차트 패턴 경고: '+pt.name+' — 하방 진입 전 주의.');
-      else cautions.push('차트 패턴 중립: '+pt.name+' — 이탈 방향 확인 필요.');
-    });
-  }
+  // 7. 캔들 + 차트 패턴
+  var cpLines=[];
+  if(multi){ var mc2=multi.sentiment==='bullish'?'#22c55e':'#ef4444'; cpLines.push('3봉 패턴: <b style="color:'+mc2+'">'+multi.name+'</b> — '+multi.desc); if(multi.sentiment==='bullish'){totalSig++;posSig++;}else{totalSig++;} }
+  if(cdl&&cdl.name&&cdl.name!=='봉 데이터 부족'){ var cc2=cdl.sentiment==='bullish'?'#22c55e':cdl.sentiment==='bearish'?'#ef4444':'#6b7280'; cpLines.push('최근 봉: <b style="color:'+cc2+'">'+cdl.name+'</b> — '+cdl.desc); if(cdl.sentiment==='bullish'){totalSig++;posSig++;}else if(cdl.sentiment==='bearish'){totalSig++;} }
+  if(patterns&&patterns.length){ patterns.forEach(function(pt){ var pc=pt.type==='bullish'?'#22c55e':pt.type==='bearish'?'#ef4444':'#6b7280'; cpLines.push('<b style="color:'+pc+'">'+pt.name+'</b> — '+pt.desc); if(pt.type==='bullish'){totalSig++;posSig++;}else if(pt.type==='bearish'){totalSig++;} }); }
+  if(cpLines.length) sections.push(sec('🕯 캔들 & 차트 패턴','#f97316',cpLines));
 
   // 신호 강도
-  var total=pros.length+cons.length+cautions.length;
-  var strength=total>0?Math.round(pros.length/Math.max(pros.length+cons.length,1)*100):50;
-  var sLabel=strength>=75?'강함 ★★★':strength>=50?'보통 ★★☆':'약함 ★☆☆';
-  var sCol=strength>=75?'#22c55e':strength>=50?'#f59e0b':'#ef4444';
+  var strength=totalSig>0?Math.round(posSig/totalSig*100):50;
+  var sCol=strength>=70?'#22c55e':strength>=45?'#f59e0b':'#ef4444';
+  var sLabel=strength>=70?'강함 ★★★':strength>=45?'보통 ★★☆':'약함 ★☆☆';
 
-  var h='<div style="margin-top:12px;padding:16px;background:var(--bg);border-radius:12px;border:1px solid rgba(255,255,255,.08)">';
-  h+='<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px">💡 매매 근거 분석</div>';
-
-  // 신호 강도 바
-  h+='<div style="padding:12px 14px;background:'+sCol+'12;border-radius:10px;border:1px solid '+sCol+'33;margin-bottom:14px">';
-  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
-  h+='<div style="font-size:14px;font-weight:800;color:'+sCol+'">신호 강도: '+sLabel+'</div>';
-  h+='<div style="font-size:12px;color:var(--mt)">긍정 <b style="color:#22c55e">'+pros.length+'</b> / 주의 <b style="color:#f59e0b">'+cautions.length+'</b> / 부정 <b style="color:#ef4444">'+cons.length+'</b></div>';
+  var h='<div style="background:var(--bg);border-radius:14px;border:1px solid rgba(255,255,255,.1);padding:16px;margin-bottom:16px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+  h+='<div style="font-size:15px;font-weight:800;color:var(--tx)">💡 매수 근거 종합 분석</div>';
+  h+='<div style="text-align:right"><div style="font-size:10px;color:#6b7280">신호 강도</div><div style="font-size:18px;font-weight:900;color:'+sCol+'">'+strength+'% '+sLabel+'</div></div>';
   h+='</div>';
-  h+='<div style="height:10px;background:var(--s2);border-radius:5px;overflow:hidden">';
-  h+='<div style="height:100%;width:'+strength+'%;background:'+sCol+';border-radius:5px"></div>';
-  h+='</div></div>';
-
-  var listItem=function(txt,col){ return '<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);align-items:flex-start">'+'<span style="color:'+col+';font-size:15px;flex-shrink:0;line-height:1.4">●</span>'+'<span style="font-size:13px;color:var(--tx);line-height:1.6">'+txt+'</span></div>'; };
-
-  if(pros.length){
-    h+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:800;color:#22c55e;margin-bottom:6px;display:flex;align-items:center;gap:6px">✅ 긍정 근거 <span style="font-size:11px;background:#22c55e22;border-radius:10px;padding:1px 8px;color:#22c55e">'+pros.length+'개</span></div>';
-    pros.forEach(function(p){ h+=listItem(p,'#22c55e'); });
-    h+='</div>';
-  }
-  if(cautions.length){
-    h+='<div style="margin-bottom:12px"><div style="font-size:13px;font-weight:800;color:#f59e0b;margin-bottom:6px;display:flex;align-items:center;gap:6px">⚠️ 주의 사항 <span style="font-size:11px;background:#f59e0b22;border-radius:10px;padding:1px 8px;color:#f59e0b">'+cautions.length+'개</span></div>';
-    cautions.forEach(function(c){ h+=listItem(c,'#f59e0b'); });
-    h+='</div>';
-  }
-  if(cons.length){
-    h+='<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:800;color:#ef4444;margin-bottom:6px;display:flex;align-items:center;gap:6px">❌ 위험 신호 <span style="font-size:11px;background:#ef444422;border-radius:10px;padding:1px 8px;color:#ef4444">'+cons.length+'개</span></div>';
-    cons.forEach(function(c){ h+=listItem(c,'#ef4444'); });
-    h+='</div>';
-  }
+  h+='<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden;margin-bottom:14px"><div style="height:100%;width:'+strength+'%;background:'+sCol+';border-radius:4px"></div></div>';
+  h+=sections.join('');
   h+='</div>';
   return h;
 }
