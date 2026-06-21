@@ -2639,7 +2639,7 @@ function buildCSS(){
   +'.ct-sym-btn{padding:9px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}'
   // 2열 레이아웃 (PC)
   +'.ct-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}'
-  +'.ct-col-left{min-width:0;position:sticky;top:90px}'
+  +'.ct-col-left{min-width:0;position:sticky;top:140px}'
   +'.ct-col-right{min-width:0}'
   // 히스토리 테이블
   +'.ct-hist-table{width:100%;border-collapse:collapse}'
