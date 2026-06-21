@@ -14,9 +14,7 @@ window.showChart = function(){
   if(!wrap) return;
   _tvLoaded = false;
   wrap.innerHTML = buildCSS() + buildHero() + buildTabBar() + buildTabContent();
-  window._ctSwitchTab(_ctTab);
-  // 기본 종목 자동 분석
-  setTimeout(function(){ window._ctAutoAnalyze(_ctSymbol); }, 500);
+  window._ctSwitchTab('chart');
 };
 
 // ── 탭 전환 ──
@@ -2055,7 +2053,7 @@ function buildHero(){
 }
 
 function buildTabBar(){
-  var tabs=[{id:'chart',label:'📈 차트 + 자동 분석'},{id:'analyze',label:'🔍 수동 분석'},{id:'theory',label:'📚 이론 가이드'}];
+  var tabs=[{id:'chart',label:'📈 차트 분석'},{id:'analyze',label:'🔬 상세 입력'},{id:'theory',label:'📚 이론 가이드'}];
   return '<div class="ct-tab-bar">'
   +tabs.map(function(t){ return '<button class="ct-tab" data-t="'+t.id+'" onclick="window._ctSwitchTab(\''+t.id+'\')">'+t.label+'</button>'; }).join('')
   +'</div>';
@@ -2063,22 +2061,143 @@ function buildTabBar(){
 
 function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildTheoryPane(); }
 
-// ── 차트 탭 ──
+// ── 차트 탭 (TradingView 차트 + 직접 입력 분석) ──
 function buildChartPane(){
   return '<div class="ct-pane" data-pane="chart" style="display:none">'
+
+  // 종목 검색바
   +'<div class="ct-sym-bar">'
-  +'<input id="ct-sym-input" class="ct-sym-in" placeholder="종목코드 (005930, AAPL, BTCUSDT)" value="005930" onkeydown="if(event.key===\'Enter\')window._ctChangeSymbol()">'
-  +'<select id="ct-int-select" class="ct-sym-in" style="max-width:90px">'
+  +'<input id="ct-sym-input" class="ct-sym-in" placeholder="종목 (005930, AAPL, BTCUSDT)" value="005930" onkeydown="if(event.key===\'Enter\')window._ctChangeSymbol()">'
+  +'<select id="ct-int-select" class="ct-sym-in" style="max-width:80px">'
   +'<option value="5">5분</option><option value="15">15분</option><option value="60">1시간</option>'
   +'<option value="D" selected>일봉</option><option value="W">주봉</option><option value="M">월봉</option>'
   +'</select>'
-  +'<button class="ct-sym-btn" onclick="window._ctChangeSymbol()">분석</button>'
+  +'<button class="ct-sym-btn" onclick="window._ctChangeSymbol()">차트</button>'
   +'</div>'
-  +'<div id="ct-tv-box" style="height:520px;border-radius:10px;overflow:hidden;border:1px solid var(--bd)"></div>'
-  +'<div id="ct-auto-output"></div>'
-  +'<div style="margin-top:8px;font-size:11px;color:#374151;text-align:center">Yahoo Finance 일봉 6개월 데이터 자동 분석 | 정밀 보정은 🔍 수동 분석 탭</div>'
+
+  // TradingView 차트
+  +'<div id="ct-tv-box" style="height:500px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:16px"></div>'
+
+  // 입력 폼 (차트 보면서 직접 입력)
+  +'<div style="background:var(--bg);border:1.5px solid var(--bd);border-radius:14px;padding:18px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📊 위 차트를 보고 입력하면 바로 분석됩니다</div>'
+  +'<div style="font-size:12px;color:#6b7280;margin-bottom:16px">TradingView 차트에서 현재가·지지·저항 읽기 → 아래 입력 → 분석 실행</div>'
+
+  // 현재가 + 추세
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+  +'<div>'
+  +'<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:6px">현재 가격 *</div>'
+  +'<input id="ct-c-price" class="ct-input" type="number" placeholder="현재 주가" oninput="window._ctChartFill()" style="font-size:16px;font-weight:700">'
+  +'</div>'
+  +'<div>'
+  +'<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:6px">추세 구분</div>'
+  +'<select id="ct-c-struct" class="ct-input" style="font-size:13px">'
+  +'<option value="box">📦 박스 횡보</option>'
+  +'<option value="trend-up">📈 상승 추세</option>'
+  +'<option value="trend-down">📉 하락 추세</option>'
+  +'</select>'
+  +'</div>'
+  +'</div>'
+
+  // 박스 상단 / 하단
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
+  +'<div>'
+  +'<div style="font-size:12px;font-weight:700;color:#ef4444;margin-bottom:6px">저항 (박스 상단)</div>'
+  +'<input id="ct-c-upper" class="ct-input" type="number" placeholder="최근 고점·저항가">'
+  +'</div>'
+  +'<div>'
+  +'<div style="font-size:12px;font-weight:700;color:#22c55e;margin-bottom:6px">지지 (박스 하단)</div>'
+  +'<input id="ct-c-lower" class="ct-input" type="number" placeholder="최근 저점·지지가">'
+  +'</div>'
+  +'</div>'
+
+  // 보조지표 (선택)
+  +'<details style="margin-bottom:14px">'
+  +'<summary style="font-size:12px;font-weight:700;color:#6b7280;cursor:pointer;margin-bottom:8px">📊 보조지표 값 추가 입력 (선택 · TradingView에서 읽기)</summary>'
+  +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px">'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:4px">RSI(14)</div><input id="ct-c-rsi" class="ct-input" type="number" placeholder="예: 45.2" step="0.1"></div>'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:4px">MACD 히스토</div><input id="ct-c-macdh" class="ct-input" type="number" placeholder="양수/음수"></div>'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:4px">SMA20</div><input id="ct-c-sma20" class="ct-input" type="number" placeholder="20일선 값"></div>'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:4px">SMA60</div><input id="ct-c-sma60" class="ct-input" type="number" placeholder="60일선 값"></div>'
+  +'</div>'
+  +'</details>'
+
+  // 통화 선택
+  +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--tx)">통화</div>'
+  +'<select id="ct-c-currency" class="ct-input" style="max-width:130px;font-size:12px">'
+  +'<option value="KRW">🇰🇷 원화 (KRW)</option>'
+  +'<option value="USD">🇺🇸 달러 (USD)</option>'
+  +'</select>'
+  +'</div>'
+
+  // 분석 버튼
+  +'<button onclick="window._ctChartAnalyze()" style="width:100%;padding:14px;background:var(--ac);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;letter-spacing:-.2px">📊 차트 분석 실행</button>'
+  +'</div>'
+
+  // 분석 결과
+  +'<div id="ct-chart-result" style="margin-top:4px"></div>'
   +'</div>';
 }
+
+// 차트 탭에서 분석 실행
+window._ctChartAnalyze = function(){
+  var price  = parseFloat(document.getElementById('ct-c-price').value)||0;
+  var upper  = parseFloat(document.getElementById('ct-c-upper').value)||0;
+  var lower  = parseFloat(document.getElementById('ct-c-lower').value)||0;
+  var struct = document.getElementById('ct-c-struct').value;
+  var cur    = document.getElementById('ct-c-currency').value||'KRW';
+  var rsiVal = parseFloat(document.getElementById('ct-c-rsi').value)||null;
+  var machV  = parseFloat(document.getElementById('ct-c-macdh').value)||null;
+  var s20    = parseFloat(document.getElementById('ct-c-sma20').value)||null;
+  var s60    = parseFloat(document.getElementById('ct-c-sma60').value)||null;
+
+  if(!price){ alert('현재 가격을 입력해 주세요.'); return; }
+
+  var mid = upper&&lower ? Math.round((upper+lower)/2) : 0;
+
+  // 간단 추세 자동 판단 (MA 입력 시)
+  if(struct==='box'&&s20&&s60){
+    if(price>s20&&s20>s60) struct='trend-up';
+    else if(price<s20&&s20<s60) struct='trend-down';
+  }
+
+  // 지표 객체 (입력된 값만)
+  var ind = null;
+  if(rsiVal||machV||s20){
+    ind = {
+      sma:{s5:null, s20:s20, s60:s60, s120:null},
+      rsi: rsiVal,
+      macd: machV!=null?{line:null,signal:null,hist:machV}:null,
+      bb: upper&&lower?{upper:upper,middle:mid,lower:lower}:null,
+      candle:{name:'',desc:'',sentiment:'neutral'},
+      vol:{cur:0,avg:0}, trend:struct,
+      patterns:[], rsiDiv:null, macdCross:null, obvTrend:null,
+      multiCandle:null, maSlopes:{s5:0,s20:0,s60:0}, devs:{},
+      closes:[], highs:[], lows:[]
+    };
+  }
+
+  var d = {
+    structure: struct, frame: 'daily',
+    currentPrice: price, currency: cur,
+    boxUpper: upper||0, boxClose: mid||0, boxLower: lower||0,
+    dojiUpper:0, dojiClose:0, dojiLower:0, dojiType:'none',
+    eventClose:0, volLevel:'normal', volContext:'none',
+    gap:'none', retest:'pending',
+    note: document.getElementById('ct-sym-input').value+' | TradingView 차트 직접 입력',
+    indicators: ind
+  };
+
+  var out = document.getElementById('ct-chart-result');
+  if(out){
+    try {
+      out.innerHTML = generateAnalysis(d) + (ind ? buildTechSection(ind, price, function(v){ return formatPrice(v,cur); }) : '');
+    } catch(e){
+      out.innerHTML = '<div style="padding:12px;color:#ef4444;font-size:12px">분석 오류: '+e.message+'</div>';
+    }
+  }
+};
 
 // ── 수동 분석 탭 ──
 function buildAnalyzePane(){
