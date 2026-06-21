@@ -309,25 +309,59 @@ window._ctAutoAnalyze = async function(symbol){
     return;
   }
 
-  // ── 전부 실패 ──
-  var workerStatus = workerDeployed ? '✅ 배포됨' : '❌ 미배포 또는 충돌';
+  // ── 전부 실패 — 인라인 직접 입력으로 전환 ──
   var errSummary = pingDiag
     +' | quote:'+(workerDeployed?wRes.error:'skipped')
     +' | proxy:'+(fetched.errors||[]).filter(Boolean).slice(0,1).join('');
-  out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px">'
-  +'<div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">⚠ 시세 데이터 수집 불가</div>'
-  +'<div style="padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--mt)">'
-  +'Cloudflare Worker: <b>'+workerStatus+'</b><br>'
-  +(workerDeployed&&wRes.error?'Yahoo Finance 응답 실패 — Stooq 폴백도 실패<br>':'')
-  +(!workerDeployed?'→ Cloudflare Pages가 아직 _worker.js를 배포하지 않았을 수 있습니다.<br>페이지를 새로고침하거나 잠시 후 다시 시도하세요.':'')
+  out.innerHTML = '<div style="margin-top:12px;border-radius:14px;overflow:hidden;border:1px solid var(--bd)">'
+  +'<div style="padding:12px 16px;background:rgba(239,68,68,.08);border-bottom:1px solid rgba(239,68,68,.2);display:flex;align-items:center;gap:10px">'
+  +'<span style="font-size:18px">⚠</span>'
+  +'<div><div style="font-size:13px;font-weight:700;color:#ef4444">자동 시세 수집 실패</div>'
+  +'<div style="font-size:10px;color:#4b5563;margin-top:1px">진단: '+errSummary+'</div></div>'
   +'</div>'
-  +'<div style="font-size:10px;color:#4b5563;margin-bottom:12px">진단: '+errSummary+'</div>'
-  +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
-  +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;min-width:140px;padding:11px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
-  +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;min-width:140px;padding:11px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance에서 가격 확인</a>'
+  +'<div style="padding:16px;background:var(--s2)">'
+  +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📊 TradingView 차트에서 값을 읽어 아래에 입력하면 바로 분석됩니다</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:var(--mt);margin-bottom:4px">현재 가격 *</div>'
+  +'<input id="ct-quick-price" class="ct-sym-in" type="number" placeholder="현재 주가"></div>'
+  +'<div><div style="font-size:11px;color:var(--mt);margin-bottom:4px">추세 구분</div>'
+  +'<select id="ct-quick-structure" class="ct-sym-in">'
+  +'<option value="box">📦 박스(횡보)</option>'
+  +'<option value="trend-up">📈 상승 추세</option>'
+  +'<option value="trend-down">📉 하락 추세</option>'
+  +'</select></div>'
   +'</div>'
-  +'<div style="font-size:12px;color:#6b7280">📌 TradingView 차트는 위에서 정상 표시됩니다. 가격을 읽어 직접 입력 탭에 넣으면 차트술사 구조론 분석이 실행됩니다.</div>'
-  +'</div>';
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'
+  +'<div><div style="font-size:11px;color:#ef4444;margin-bottom:4px">박스 상단 (저항)</div>'
+  +'<input id="ct-quick-upper" class="ct-sym-in" type="number" placeholder="저항가"></div>'
+  +'<div><div style="font-size:11px;color:var(--mt);margin-bottom:4px">중심가 (선택)</div>'
+  +'<input id="ct-quick-mid" class="ct-sym-in" type="number" placeholder="자동"></div>'
+  +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">박스 하단 (지지)</div>'
+  +'<input id="ct-quick-lower" class="ct-sym-in" type="number" placeholder="지지가"></div>'
+  +'</div>'
+  +'<button onclick="window._ctQuickAnalyze()" style="width:100%;padding:12px;background:var(--ac);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">📊 차트 분석 실행</button>'
+  +'</div></div>';
+};
+
+// 에러 화면에서 직접 입력 분석
+window._ctQuickAnalyze = function(){
+  var price = parseFloat(document.getElementById('ct-quick-price').value)||0;
+  var upper = parseFloat(document.getElementById('ct-quick-upper').value)||0;
+  var mid   = parseFloat(document.getElementById('ct-quick-mid').value)||0;
+  var lower = parseFloat(document.getElementById('ct-quick-lower').value)||0;
+  var struct= document.getElementById('ct-quick-structure').value;
+  if(!price){ alert('현재 가격을 입력해 주세요.'); return; }
+  var cur = formatPrice ? formatPrice : function(v){ return Math.round(v).toLocaleString()+'원'; };
+  var data = {
+    structure: struct, frame:'daily',
+    currentPrice: price, currency: 'KRW',
+    boxUpper: upper, boxClose: mid, boxLower: lower,
+    dojiUpper:0, dojiClose:0, dojiLower:0, dojiType:'none',
+    eventClose:0, volLevel:'normal', volContext:'none',
+    gap:'none', retest:'pending', note:'차트에서 직접 입력'
+  };
+  var out = document.getElementById('ct-auto-output');
+  if(out) out.innerHTML = generateAnalysis(data);
 };
 
 // 로딩 표시

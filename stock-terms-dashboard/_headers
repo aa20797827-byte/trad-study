@@ -1,0 +1,14 @@
+# Cloudflare Pages 캐시 제어
+# JS 파일은 항상 최신 버전을 서빙
+
+/chart-theory.js
+  Cache-Control: no-cache, must-revalidate
+
+/ta-visual.js
+  Cache-Control: no-cache, must-revalidate
+
+/*.js
+  Cache-Control: public, max-age=3600
+
+/index.html
+  Cache-Control: no-cache, must-revalidate
