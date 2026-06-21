@@ -82,22 +82,56 @@ function toYahooTicker(sym){
   return sym;
 }
 
-// Yahoo Finance 데이터 페치 (CORS 프록시 2단 fallback)
+// 단일 프록시 URL 시도 — 성공 시 Yahoo chart JSON 반환, 실패 시 null
+async function _tryFetch(url, ms){
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, ms);
+  try {
+    var resp = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(timer);
+    if(!resp.ok) return null;
+    var text = await resp.text();
+    if(!text || text.length < 100) return null;
+    var json;
+    try { json = JSON.parse(text); } catch(e){ return null; }
+    if(json && typeof json.contents === 'string'){
+      try { json = JSON.parse(json.contents); } catch(e){ return null; }
+    }
+    if(json && json.chart && json.chart.result && json.chart.result[0]) return json;
+    return null;
+  } catch(e){ clearTimeout(timer); return null; }
+}
+
+// 여러 Promise 중 첫 번째 non-null 값 반환 (나머지는 무시)
+function _raceSuccess(promises){
+  return new Promise(function(resolve){
+    var remaining = promises.length;
+    if(!remaining){ resolve(null); return; }
+    promises.forEach(function(p){
+      Promise.resolve(p).then(function(v){
+        if(v) resolve(v);
+        else if(--remaining === 0) resolve(null);
+      }).catch(function(){ if(--remaining === 0) resolve(null); });
+    });
+  });
+}
+
+// Yahoo Finance 데이터 페치 — 4개 프록시 병렬 시도, query1/query2 순차 fallback
 async function fetchYahoo(ticker){
-  var baseUrl = 'https://query1.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=6mo';
-  var proxies = [
-    'https://corsproxy.io/?'+encodeURIComponent(baseUrl),
-    'https://api.allorigins.win/get?url='+encodeURIComponent(baseUrl)
+  var yUrls = [
+    'https://query1.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=6mo&includePrePost=false',
+    'https://query2.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=6mo&includePrePost=false',
   ];
-  for(var i=0; i<proxies.length; i++){
-    try {
-      var resp = await fetch(proxies[i], {signal: AbortSignal.timeout ? AbortSignal.timeout(8000) : undefined});
-      if(!resp.ok) continue;
-      var json = await resp.json();
-      // allorigins wraps in {contents: "..."}
-      if(json.contents) json = JSON.parse(json.contents);
-      if(json.chart && json.chart.result && json.chart.result[0]) return json;
-    } catch(e){ continue; }
+  var mkProxy = [
+    function(u){ return 'https://corsproxy.io/?'+encodeURIComponent(u); },
+    function(u){ return 'https://api.allorigins.win/raw?url='+encodeURIComponent(u); },
+    function(u){ return 'https://api.allorigins.win/get?url='+encodeURIComponent(u); },
+    function(u){ return 'https://thingproxy.freeboard.io/fetch/'+u; },
+  ];
+  for(var yi=0; yi<yUrls.length; yi++){
+    var u = yUrls[yi];
+    var result = await _raceSuccess(mkProxy.map(function(mk){ return _tryFetch(mk(u), 10000); }));
+    if(result) return result;
   }
   return null;
 }
@@ -128,12 +162,7 @@ window._ctAutoAnalyze = async function(symbol){
     var meta = res.meta;
     var q    = res.indicators.quote[0];
 
-    if(closes.length < 5){
-      out.innerHTML = '<div style="padding:12px;color:#f59e0b;font-size:12px">⚠ 데이터 부족. 수동 분석 탭을 이용해 주세요.</div>';
-      return;
-    }
-
-    // ── 버그1 수정: 날짜 동기화 — 배열별 독립 null 제거 대신 행 단위 동기화 ──
+    // 날짜 동기화: 행 단위로 null 제거 (closes/vols 인덱스 불일치 방지)
     var pairs = (res.timestamp||[]).map(function(_,i){
       return {c:q.close[i], o:q.open[i], h:q.high[i], l:q.low[i], v:q.volume[i]};
     }).filter(function(d){
@@ -145,6 +174,12 @@ window._ctAutoAnalyze = async function(symbol){
     var highs  = pairs.map(function(d){return +d.h;});
     var lows   = pairs.map(function(d){return +d.l;});
     var vols   = pairs.map(function(d){return +d.v||0;});
+
+    // closes 정의 이후에 길이 체크 (이전 순서 버그 수정)
+    if(closes.length < 5){
+      out.innerHTML = '<div style="padding:12px;color:#f59e0b;font-size:12px">⚠ 데이터 부족. 수동 분석 탭을 이용해 주세요.</div>';
+      return;
+    }
 
     var curPrice = meta.regularMarketPrice || closes[closes.length-1];
     var currency = meta.currency || 'KRW';
@@ -166,9 +201,10 @@ window._ctAutoAnalyze = async function(symbol){
 
 // 로딩 표시
 function loading(sym){
-  return '<div style="margin-top:12px;padding:16px;text-align:center;background:var(--s2);border:1px solid var(--bd);border-radius:10px">'
-  +'<div style="font-size:22px;margin-bottom:6px;animation:ct-spin 1s linear infinite">⏳</div>'
-  +'<div style="font-size:12px;color:var(--mt)">'+sym+' 차트 데이터 수집 및 자동 분석 중...</div>'
+  return '<div style="margin-top:12px;padding:20px 16px;text-align:center;background:var(--s2);border:1px solid var(--bd);border-radius:10px">'
+  +'<div style="font-size:26px;margin-bottom:8px;display:inline-block;animation:ct-spin 1.2s linear infinite">⏳</div>'
+  +'<div style="font-size:13px;font-weight:600;color:var(--tx);margin-bottom:4px">'+sym+' 데이터 수집 중...</div>'
+  +'<div style="font-size:11px;color:#4b5563">4개 서버 동시 연결 · 최초 10초 소요될 수 있습니다</div>'
   +'<style>@keyframes ct-spin{to{transform:rotate(360deg)}}</style></div>';
 }
 
