@@ -222,10 +222,19 @@ window._ctAutoAnalyze = async function(symbol){
     aData.currency = currency;
     aData.note = name + ' | ' + ticker + ' | 일봉 6개월 자동 감지 (Yahoo Finance)';
 
-    out.innerHTML = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
+    // 분석 + 뉴스 병렬 fetch
+    var newsPromise = fetchNews(ticker);
+    var analysisHtml = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
+    out.innerHTML = analysisHtml + '<div id="ct-news-area"><div style="padding:12px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
 
     // 구조론 분석 폼에도 값 채워 넣기
     fillForm(aData);
+
+    // 뉴스 완료 후 삽입
+    newsPromise.then(function(news){
+      var newsEl = document.getElementById('ct-news-area');
+      if(newsEl) newsEl.innerHTML = buildNewsCard(news);
+    });
 
   } catch(e){
     out.innerHTML = '<div style="padding:12px;color:#ef4444;font-size:12px">⚠ 분석 오류: '+e.message+'</div>';
@@ -565,42 +574,163 @@ function generateAnalysis(d){
   // 사건봉 추가
   if(ec){ (p>=ec ? supportC : resistC).push('사건봉 종가 '+fp(ec)+'(대량거래 합의)'); }
 
-  var dojiTypeText = d.dojiType==='strength'?'추세강화도지 — 추세 중간 에너지 재충전. 재방문 시 강한 지지/저항':
-                    d.dojiType==='reversal'?'추세반전도지 — 추세 전환 기준점. 재침범 시 새 추세 훼손 신호':'';
+  // ── 진입/손절/익절 가격 추출 ──
+  var e1p=0,e1r='', e2p=0,e2r='', slp=0,slr='', t1p=0,t1r='', t2r='';
+  var isBuyA = finalJudge.includes('매수') || finalJudge.indexOf('눌림')>-1;
+  if(hasDoji){
+    if(p>=dl && p<=du){
+      if(p<=dc){ e1p=dc;e1r='도지 종가 (내부 균형점)'; e2p=dl;e2r='도지 하단 (매수세 경계)'; slp=dl;slr='도지 하단 종가 이탈'; t1p=du;t1r='도지 상단 돌파 목표'; t2r='도지 상단 종가 돌파 후 다음 기능선'; }
+      else       { e1p=du;e1r='도지 상단 (1차 매도)'; e2p=dc;e2r='도지 종가 (2차 매도)'; slp=du;slr='도지 상단 종가 돌파 시 실패'; t1p=dc;t1r='도지 종가 이탈'; t2r=fp(dl)+' 도지 하단 도달'; }
+    } else if(p>du){ e1p=du;e1r='도지 상단 지지 전환 확인 (1차)'; e2p=dc;e2r='도지 종가 지지 확인 (2차)'; slp=dl;slr='도지 하단 종가 이탈 시 실패'; t1r='직전 고점 또는 다음 저항'; t2r='추세 가속 후 다음 기능선'; }
+    else            { e1p=dl;e1r='도지 하단 저항 전환 확인 (1차)'; e2p=dc;e2r='도지 종가 저항 확인 (2차)'; slp=du;slr='도지 상단 종가 돌파 시 실패'; t1r='직전 저점 또는 다음 지지'; t2r='추세 하락 가속'; }
+  } else if(hasBox){
+    if(p>=bl && p<=bc){ e1p=bc;e1r='박스 종가 클러스터 지지'; e2p=bl;e2r='박스 하단 매수세 경계'; slp=bl;slr='박스 하단 종가 이탈'; t1p=bu;t1r='박스 상단 저항 (1차 목표)'; t2r='박스 상단 종가 돌파 후 다음 기능선'; }
+    else if(p>bc&&p<=bu){ e1p=bu;e1r='박스 상단 저항 (1차 매도)'; e2p=bc;e2r='박스 종가 균형 (2차 매도)'; slp=bu;slr='박스 상단 종가 돌파 시 실패'; t1p=bc;t1r='박스 종가 이탈'; t2r=fp(bl)+' 박스 하단 도달'; }
+    else if(p>bu){ e1p=bu;e1r='박스 상단 지지 전환 확인 (1차)'; e2p=bc;e2r='박스 종가 지지 확인 (2차)'; slp=bc;slr='박스 종가 종가 이탈'; t1r='이전 고점 또는 다음 저항'; t2r='추세 가속'; }
+    else          { e1p=bl;e1r='박스 하단 저항 전환 확인 (1차)'; e2p=bc;e2r='박스 종가 저항 확인 (2차)'; slp=bc;slr='박스 종가 종가 돌파 시 실패'; t1r='이전 저점 또는 다음 지지'; t2r='추세 하락 가속'; }
+  }
 
-  var fLines=[];
-  if(du) fLines.push('도지 상단: '+fp(du));
-  if(dc) fLines.push('도지 종가: '+fp(dc)+' ← 압축된 합의가격');
-  if(dl) fLines.push('도지 하단: '+fp(dl));
-  if(bu) fLines.push('박스 상단: '+fp(bu));
-  if(bc&&hasBox) fLines.push('박스 종가 클러스터: '+fp(bc));
-  if(bl) fLines.push('박스 하단: '+fp(bl));
-  if(ec) fLines.push('사건봉 종가: '+fp(ec)+' ← 대량거래 후 합의');
-
+  // ── 출력 빌더 ──
   var color  = finalJudge.includes('매수')?'#22c55e':finalJudge.includes('매도')?'#ef4444':'#f59e0b';
-  var bgC    = finalJudge.includes('매수')?'rgba(34,197,94,.12)':finalJudge.includes('매도')?'rgba(239,68,68,.12)':'rgba(245,158,11,.12)';
-  var structLabel = (d.structure==='box'?'📦 박스 구간':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세')+' | 格: '+grade;
+  var bgC    = finalJudge.includes('매수')?'rgba(34,197,94,.15)':finalJudge.includes('매도')?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)';
+  var structLabel = (d.structure==='box'?'📦 박스':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세')+' | '+grade;
+  var dojiTypeText = d.dojiType==='strength'?'추세강화도지':d.dojiType==='reversal'?'추세반전도지':'';
+  var fLines=[];
+  if(du) fLines.push(fp(du)+' (도지 상단)');
+  if(dc) fLines.push(fp(dc)+' (도지 종가 ★합의)');
+  if(dl) fLines.push(fp(dl)+' (도지 하단)');
+  if(bu) fLines.push(fp(bu)+' (박스 상단)');
+  if(bc&&hasBox) fLines.push(fp(bc)+' (박스 종가)');
+  if(bl) fLines.push(fp(bl)+' (박스 하단)');
+  if(ec) fLines.push(fp(ec)+' (사건봉 종가)');
 
-  return '<div style="background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:20px;margin-top:4px">'
-  +'<div style="font-size:15px;font-weight:800;margin-bottom:14px;color:var(--tx)">📊 차트 분석 결과</div>'
-  +row('1. 현재 구조', structLabel)
-  +row('2. 분석 관점', recommendation)
-  +row('3. 가격 위치', (p?fp(p):'미입력')+' — '+posStr)
-  +section('4. 핵심 기능선', fLines.length?fLines.map(function(l){return '• '+l;}).join('<br>'):'미입력')
-  +(dojiTypeText?row('4-1. 도지 타입', dojiTypeText):'')
-  +section('5. 핵심 지지 후보', supportC.length?supportC.map(function(s,i){return '• '+(i===0?'1차: ':i===1?'2차: ':'보조: ')+s;}).join('<br>'):'해당 없음')
-  +section('6. 핵심 저항 후보', resistC.length?resistC.map(function(s,i){return '• '+(i===0?'1차: ':i===1?'2차: ':'보조: ')+s;}).join('<br>'):'해당 없음')
-  +(removedC.length?section('7. 제거한 후보', removedC.map(function(r){return '• <s>'+r.price+'</s> — '+r.reason;}).join('<br>')):'')
-  +(gapText?section('8. 갭 해석', '• '+gapText+(gapWarn?'<br>• '+gapWarn:'')):'')
-  +section('거래량 해석', '• '+volText)
-  +section('매매 시나리오', scenarios.map(function(s){return '• '+s;}).join('<br>'))
-  +section('진입 전략', entries.map(function(e){return '• '+e;}).join('<br>'))
-  +row('손절 기준', '⛔ '+stopLoss)
-  +(targets.length?section('익절 기준', targets.map(function(t){return '• '+t;}).join('<br>')):'')
-  +(d.note?row('참고', d.note):'')
-  +'<div style="margin-top:16px;padding:14px;border-radius:8px;background:'+bgC+';border:1.5px solid '+color+';font-size:14px;font-weight:700;color:'+color+'">'
-  +'🏁 최종 판단: '+finalJudge+'</div>'
-  +'<div style="margin-top:8px;font-size:10px;color:#4b5563">⚠ 구조론 규칙 기반 시나리오입니다. 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
+  // ── 진입/손절/익절 카드 빌더 ──
+  function priceCard(label, price, reason, col){
+    var bgMap={buy:'rgba(34,197,94,.1)',sell:'rgba(239,68,68,.1)',stop:'rgba(239,68,68,.07)',target:'rgba(59,130,246,.1)',wait:'rgba(245,158,11,.1)'};
+    var borderMap={buy:'#22c55e',sell:'#ef4444',stop:'#ef4444',target:'#3b82f6',wait:'#f59e0b'};
+    var textMap={buy:'#22c55e',sell:'#ef4444',stop:'#ef4444',target:'#60a5fa',wait:'#f59e0b'};
+    return '<div style="background:'+bgMap[col]+';border:1.5px solid '+borderMap[col]+';border-radius:10px;padding:12px;text-align:center;min-width:0">'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:'+textMap[col]+';margin-bottom:5px">'+label+'</div>'
+    +'<div style="font-size:'+(price&&price.toString().length<10?'17':'13')+'px;font-weight:900;color:var(--tx);margin-bottom:6px;word-break:break-all">'+( price ? fp(price) : '—' )+'</div>'
+    +'<div style="font-size:10px;color:#6b7280;line-height:1.4">'+reason+'</div>'
+    +'</div>';
+  }
+
+  var eType = isBuyA ? 'buy' : 'sell';
+  var eLabel1 = isBuyA ? '1차 매수' : '1차 매도';
+  var eLabel2 = isBuyA ? '2차 매수' : '2차 매도';
+
+  var priceSummary = '<div style="margin-bottom:14px">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:8px;letter-spacing:.3px">💰 매매 핵심 요약</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
+  + priceCard(eLabel1, e1p||0, e1r||'(리테스트 대기 후 확인)', eType)
+  + priceCard(eLabel2, e2p||0, e2r||'(추가 조정·반등 시)', eType)
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+  + priceCard('⛔ 손절가', slp||0, slr||'기능선 종가 이탈 시', 'stop')
+  + priceCard(isBuyA?'🎯 1차 익절':'🎯 1차 목표', t1p||0, t1r||'다음 기능선 도달', 'target')
+  +'</div>'
+  +(t2r?'<div style="margin-top:6px;padding:8px 12px;background:rgba(59,130,246,.06);border-radius:6px;font-size:11px;color:var(--mt)">2차 목표: '+t2r+'</div>':'')
+  +'</div>';
+
+  // ── 시나리오 카드 ──
+  var scenarioCards = scenarios.length ? '<div style="display:grid;gap:8px;margin-bottom:10px">'
+  + scenarios.map(function(s,i){
+    var isA = i===0;
+    return '<div style="padding:10px 12px;border-radius:8px;border-left:3px solid '+(isA?'#22c55e':'#ef4444')+';background:'+(isA?'rgba(34,197,94,.06)':'rgba(239,68,68,.06)')+'">'
+    +'<div style="font-size:11px;font-weight:700;color:'+(isA?'#22c55e':'#ef4444')+';margin-bottom:3px">'+( isA?'시나리오 A (성공)':'시나리오 B (실패)')+'</div>'
+    +'<div style="font-size:12px;color:var(--mt)">'+s.replace(/^시나리오 [AB][^:]*: /,'')+'</div>'
+    +'</div>';
+  }).join('') +'</div>' : '';
+
+  return '<div style="background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:18px;margin-top:4px">'
+
+  // 1. 최종 판단 배너 (가장 위)
+  +'<div style="padding:14px 16px;border-radius:10px;background:'+bgC+';border:2px solid '+color+';margin-bottom:16px;display:flex;align-items:center;gap:10px">'
+  +'<div style="font-size:22px">🏁</div>'
+  +'<div style="flex:1">'
+  +'<div style="font-size:16px;font-weight:900;color:'+color+'">'+finalJudge+'</div>'
+  +'<div style="font-size:11px;color:var(--mt);margin-top:2px">'+structLabel+' | 현재가 '+(p?fp(p):'미입력')+' — '+posStr+'</div>'
+  +'</div>'
+  +'</div>'
+
+  // 2. 진입/손절/익절 가격 카드 (핵심)
+  + priceSummary
+
+  // 3. 매매 근거 (시나리오 A/B)
+  +'<div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:8px;letter-spacing:.3px">📋 매매 시나리오</div>'
+  + scenarioCards
+
+  // 4. 핵심 기능선
+  + (fLines.length?'<div style="padding:10px 12px;background:var(--bg);border-radius:8px;margin-bottom:10px">'
+  +'<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:6px">📍 핵심 기능선'+(dojiTypeText?' — <span style="color:#f59e0b">'+dojiTypeText+'</span>':'')+'</div>'
+  +'<div style="display:flex;flex-wrap:wrap;gap:6px">'
+  +fLines.map(function(l){ return '<span style="background:var(--s2);border:1px solid var(--bd);border-radius:6px;padding:3px 8px;font-size:11px;color:var(--tx)">'+l+'</span>'; }).join('')
+  +'</div></div>':'')
+
+  // 5. 거래량 + 갭 (컴팩트)
+  +'<div style="font-size:12px;color:var(--mt);line-height:1.8;padding:8px 0;border-top:1px solid rgba(255,255,255,.05)">'
+  +'<div><span style="font-size:10px;font-weight:700;color:#4b5563;margin-right:6px">거래량</span>'+volText+'</div>'
+  +(gapText?'<div><span style="font-size:10px;font-weight:700;color:#4b5563;margin-right:6px">갭</span>'+gapText+'</div>':'')
+  +(supportC.length?'<div><span style="font-size:10px;font-weight:700;color:#22c55e;margin-right:6px">지지</span>'+supportC.slice(0,2).join(' / ')+'</div>':'')
+  +(resistC.length?'<div><span style="font-size:10px;font-weight:700;color:#ef4444;margin-right:6px">저항</span>'+resistC.slice(0,2).join(' / ')+'</div>':'')
+  +(d.note?'<div><span style="font-size:10px;font-weight:700;color:#4b5563;margin-right:6px">참고</span>'+d.note+'</div>':'')
+  +'</div>'
+  +'<div style="margin-top:8px;font-size:10px;color:#374151">⚠ 구조론 기반 시나리오 — 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
+  +'</div>';
+}
+
+// ── 뉴스 fetch ──
+async function fetchNews(ticker){
+  try {
+    var resp = await fetch('/api/news?symbol='+encodeURIComponent(ticker), {signal: AbortController ? (function(){ var c=new AbortController(); setTimeout(function(){c.abort();},10000); return c.signal; })() : undefined});
+    if(!resp || !resp.ok) return [];
+    var data = await resp.json();
+    return data.news || [];
+  } catch(e){ return []; }
+}
+
+// ── 뉴스 감성 분류 ──
+function classifyNews(title){
+  var pos = /상승|급등|돌파|성장|호재|개선|증가|흑자|호조|신고점|계약|수주|강세|반등|신기록|surge|gain|jump|rise|beat|growth|record|buy|upgrade|positive|strong|rally|profit/i;
+  var neg = /하락|급락|이탈|손실|적자|부진|악화|감소|신저점|취소|위기|우려|경고|약세|추락|fall|drop|decline|miss|loss|concern|risk|sell|downgrade|weak|warning|deficit|cut/i;
+  if(pos.test(title)) return 'pos';
+  if(neg.test(title)) return 'neg';
+  return 'neu';
+}
+
+// ── 뉴스 카드 빌더 ──
+function buildNewsCard(news){
+  if(!news || !news.length) return '';
+  var now = Math.floor(Date.now()/1000);
+  var timeAgo = function(ts){
+    var diff = now - ts;
+    if(diff < 3600)   return Math.floor(diff/60)+'분 전';
+    if(diff < 86400)  return Math.floor(diff/3600)+'시간 전';
+    if(diff < 604800) return Math.floor(diff/86400)+'일 전';
+    return new Date(ts*1000).toLocaleDateString('ko-KR',{month:'short',day:'numeric'});
+  };
+  var badgeMap = {
+    pos: {bg:'rgba(34,197,94,.12)',  border:'#22c55e', color:'#22c55e', label:'호재'},
+    neg: {bg:'rgba(239,68,68,.12)', border:'#ef4444', color:'#ef4444', label:'악재'},
+    neu: {bg:'rgba(156,163,175,.1)', border:'#4b5563', color:'#6b7280', label:'중립'}
+  };
+  return '<div style="margin-top:14px;background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:16px">'
+  +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:12px">📰 최근 뉴스 (호재 / 악재)</div>'
+  + news.slice(0,8).map(function(n){
+    var cls = classifyNews(n.title);
+    var b = badgeMap[cls];
+    return '<a href="'+n.link+'" target="_blank" rel="noopener" style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05);text-decoration:none;cursor:pointer">'
+    +'<div style="flex-shrink:0;margin-top:2px">'
+    +'<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:800;background:'+b.bg+';border:1px solid '+b.border+';color:'+b.color+'">'+b.label+'</span>'
+    +'</div>'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="font-size:12px;color:var(--tx);line-height:1.5;margin-bottom:3px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">'+n.title+'</div>'
+    +'<div style="font-size:10px;color:#4b5563">'+n.publisher+(n.publishedAt?' · '+timeAgo(n.publishedAt):'')+'</div>'
+    +'</div>'
+    +'</a>';
+  }).join('')
+  +'<div style="margin-top:8px;font-size:10px;color:#374151">⚠ 뉴스 감성은 키워드 기반 자동 분류입니다. 직접 확인하세요.</div>'
   +'</div>';
 }
 
