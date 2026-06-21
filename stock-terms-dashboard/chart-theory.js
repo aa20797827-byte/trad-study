@@ -158,6 +158,97 @@ async function fetchYahoo(ticker){
 }
 
 // ══════════════════════════════════════
+// ── TradingView 스캐너 API (한국·미국 주식, CORS 허용) ──
+// RSI/MACD/BB/SMA 등 이미 계산된 지표 + 현재가 반환
+// ══════════════════════════════════════
+async function fetchTradingViewScan(symbol){
+  var raw = symbol.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
+  var isKR = /^\d{4,6}$/.test(raw);
+  var tvSym = isKR ? 'KRX:'+raw : raw;
+  var scanUrl = isKR
+    ? 'https://scanner.tradingview.com/korea/scan'
+    : 'https://scanner.tradingview.com/america/scan';
+  var currency = isKR ? 'KRW' : 'USD';
+
+  var cols = [
+    'close','open','high','low','volume','change',
+    'RSI','RSI[1]','RSI[2]',
+    'MACD.macd','MACD.signal','MACD.hist',
+    'BB.upper','BB.middle','BB.lower',
+    'SMA5','SMA10','SMA20','SMA50','SMA100','SMA200',
+    'EMA20','EMA50',
+    'High.1M','Low.1M','High.3M','Low.3M',
+    'average_volume_10d_calc','average_volume_30d_calc',
+    'Recommend.All','Recommend.MA','Recommend.Other',
+    'name','description',
+  ];
+
+  var ctrl = new AbortController();
+  var timer = setTimeout(function(){ ctrl.abort(); }, 8000);
+  try {
+    var resp = await fetch(scanUrl, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        symbols: {tickers:[tvSym], query:{types:[]}},
+        columns: cols
+      }),
+      signal: ctrl.signal
+    });
+    clearTimeout(timer);
+    if(!resp.ok) return null;
+    var json = await resp.json();
+    if(!json.data || !json.data[0]) return null;
+    var vals = json.data[0].d;
+    var r = {};
+    cols.forEach(function(c,i){ r[c]=vals[i]; });
+    if(!r.close) return null;
+
+    return { r:r, currency:currency, tvSym:tvSym,
+      name: r.description || r.name || tvSym };
+  } catch(_){ clearTimeout(timer); return null; }
+}
+
+// TradingView 스캔 결과 → 분석 데이터로 변환
+function tvScanToAnalysis(tv){
+  var r = tv.r;
+  var cur = r.close;
+  // 박스 경계: 1개월 고/저 사용
+  var bu = r['High.1M']||0, bl = r['Low.1M']||0, bc = r.BB&&r['BB.middle']||Math.round((bu+bl)/2)||0;
+  // 추세 판단
+  var s20=r.SMA20||0, s50=r.SMA50||0;
+  var structure = (cur>s20&&s20>s50)?'trend-up':(cur<s20&&s20<s50)?'trend-down':'box';
+  // avgVol
+  var avgVol = r['average_volume_10d_calc']||r['average_volume_30d_calc']||0;
+  var curVol  = r.volume||0;
+  var volLevel = curVol>avgVol*1.8?'high':curVol<avgVol*0.6?'low':'normal';
+  var volCtx   = cur>(bu*0.99)?'breakout':cur<(bl*1.01)?'breakdown':
+                 (r.change>0)?'bounce':'pullback';
+
+  return {
+    structure:structure, frame:'daily',
+    currentPrice: Math.round(cur*100)/100,
+    boxUpper: Math.round(bu), boxClose: Math.round(bc), boxLower: Math.round(bl),
+    dojiUpper:0, dojiClose:0, dojiLower:0, dojiType:'none',
+    eventClose:0, volLevel:volLevel, volContext:volCtx,
+    gap:'none', retest:'pending', currency:tv.currency,
+    note: tv.name+' | TradingView 스캐너',
+    // 지표 직접 주입 (computeIndicators 대신)
+    indicators:{
+      sma:{s5:r.SMA5, s20:r.SMA20, s60:r.SMA50, s120:r.SMA100},
+      rsi: r.RSI, bb:{upper:r['BB.upper'],middle:r['BB.middle'],lower:r['BB.lower']},
+      macd:{line:r['MACD.macd'],signal:r['MACD.signal'],hist:r['MACD.hist']},
+      candle:{name:'최신봉',desc:'',sentiment:r.change>0?'bullish':'bearish'},
+      vol:{cur:Math.round(curVol),avg:Math.round(avgVol)},
+      trend:structure,
+      patterns:[], rsiDiv:null, macdCross:null, obvTrend:null,
+      multiCandle:null, maSlopes:{s5:0,s20:0,s60:0}, devs:{},
+      closes:[], highs:[], lows:[],
+    }
+  };
+}
+
+// ══════════════════════════════════════
 // ── 네이버 금융 API (한국 주식 전용, 프록시 불필요) ──
 // ══════════════════════════════════════
 async function fetchNaver(rawSym){
@@ -354,7 +445,23 @@ window._ctAutoAnalyze = async function(symbol){
 
   var ticker = toYahooTicker(symbol);
 
-  // ── 0-A순위: 네이버 금융 (한국 주식 전용, 프록시 불필요) ──
+  // ── 0순위: TradingView 스캐너 API (CORS 허용, 한국·미국 모두 지원) ──
+  out.innerHTML = loading(symbol + ' (TradingView)');
+  var tvData = await fetchTradingViewScan(symbol);
+  if(tvData){
+    var aData = tvScanToAnalysis(tvData);
+    var tvHtml = buildDetectedBadge(aData, aData.currentPrice, tvData.currency, tvData.name)
+      + generateAnalysis(aData);
+    out.innerHTML = tvHtml + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
+    fillForm(aData);
+    fetchNews(ticker).then(function(news){
+      var el=document.getElementById('ct-news-area');
+      if(el) el.innerHTML = buildNewsCard(news);
+    });
+    return;
+  }
+
+  // ── 1순위: 네이버 금융 (한국 주식) ──
   var naverSym = ticker.replace(/\.(KS|KQ)$/,'');
   if(/^\d{4,6}$/.test(naverSym)){
     out.innerHTML = loading(symbol + ' (네이버 금융)');
@@ -366,7 +473,7 @@ window._ctAutoAnalyze = async function(symbol){
     }
   }
 
-  // ── 0-B순위: Alpha Vantage (무료 API 키 설정 시) ──
+  // ── 2순위: Alpha Vantage (무료 API 키 설정 시) ──
   if(localStorage.getItem('av_api_key')){
     out.innerHTML = loading(symbol + ' (Alpha Vantage)');
     var av = await fetchAlphaVantage(symbol);
@@ -377,7 +484,7 @@ window._ctAutoAnalyze = async function(symbol){
     }
   }
 
-  // ── 1순위: Cloudflare Worker ──
+  // ── 3순위: Cloudflare Worker ──
   out.innerHTML = loading(symbol);
   var pingRes = await _tryFetch('/ping', 5000);
   var workerDeployed = !!(pingRes.ok && pingRes.ok.worker);
