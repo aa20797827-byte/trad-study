@@ -174,6 +174,8 @@ async function fetchStooq(rawSym){
     'https://corsproxy.io/?'+encodeURIComponent(baseUrl),
     'https://api.allorigins.win/raw?url='+encodeURIComponent(baseUrl),
     'https://api.allorigins.win/get?url='+encodeURIComponent(baseUrl),
+    'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(baseUrl),
+    'https://proxy.cors.sh/'+baseUrl,
   ];
   for(var i=0; i<proxies.length; i++){
     try {
@@ -301,15 +303,20 @@ window._ctAutoAnalyze = async function(symbol){
   }
 
   // ── 전부 실패 ──
-  var errSummary = ['Cloudflare Worker: '+wRes.error].concat((fetched.errors||[]).filter(Boolean)).slice(0,4).join(' / ');
-  out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px">'
-  +'<div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px">⚠ 시세 데이터 수집 불가 (Yahoo Finance + Stooq 모두 실패)</div>'
+  var workerOk = wRes.error !== 'Failed to fetch' && wRes.error !== 'net';
+  var errSummary = ['Worker: '+wRes.error].concat((fetched.errors||[]).filter(Boolean)).slice(0,3).join(' | ');
+  out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px">'
+  +'<div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">⚠ 시세 데이터 수집 불가</div>'
+  // 원인 설명
+  +(!workerOk ? '<div style="padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;margin-bottom:10px;font-size:12px;color:#f59e0b">'
+  +'<b>원인:</b> Cloudflare Worker(_worker.js)가 아직 배포 완료되지 않았거나 Pages 재배포가 필요합니다.<br>'
+  +'Cloudflare Pages 대시보드에서 이 사이트를 재배포(Redeploy)하면 해결됩니다.</div>' : '')
   +'<div style="font-size:11px;color:#4b5563;margin-bottom:12px">진단: '+errSummary+'</div>'
-  +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-  +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;min-width:140px;padding:10px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
-  +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;min-width:140px;padding:10px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance 확인</a>'
+  +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
+  +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;min-width:140px;padding:11px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
+  +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;min-width:140px;padding:11px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance에서 가격 확인</a>'
   +'</div>'
-  +'<div style="margin-top:8px;font-size:11px;color:#4b5563">TradingView 차트에서 가격을 확인 후 직접 입력 탭에 입력하면 분석 가능합니다.</div>'
+  +'<div style="font-size:12px;color:#6b7280">📌 TradingView 차트는 위에서 정상 표시됩니다. 가격을 읽어 직접 입력 탭에 넣으면 차트술사 구조론 분석이 실행됩니다.</div>'
   +'</div>';
 };
 
