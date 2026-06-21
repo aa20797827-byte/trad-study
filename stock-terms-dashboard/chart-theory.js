@@ -716,9 +716,11 @@ function buildAnalyzePane(){
   +'</div>'
   +'<div class="ct-g2">'
   +'<div class="ct-form-row"><div class="ct-label">기능선 格 (프레임)</div><select id="ct-frame" class="ct-input">'
-  +'<option value="daily" selected>B급 — 일봉</option><option value="weekly">A급 — 주봉</option>'
-  +'<option value="monthly">S급 — 월봉</option><option value="h4">C급 — 4시간</option><option value="h1">C급 — 1시간</option>'
-  +'</select></div>'
+  +'<option value="daily" selected>B급 — 일봉 (기본)</option><option value="weekly">A급 — 주봉</option>'
+  +'<option value="monthly">S급 — 월봉 (가장 강함)</option><option value="h4">C급 — 4시간</option><option value="h1">C급 — 1시간</option>'
+  +'</select>'
+  +'<div style="font-size:10px;color:#4b5563;margin-top:4px">S급(월봉) &gt; A급(주봉) &gt; B급(일봉) &gt; C급(단기) — 현재 보고 있는 차트 봉 단위를 선택하세요</div>'
+  +'</div>'
   +'</div>'
   +'<div class="ct-form-row"><div class="ct-label">현재 가격 *</div><input id="ct-price" class="ct-input" type="number" placeholder="현재 가격"></div>'
   +'</div>'
@@ -782,10 +784,30 @@ function buildTheoryPane(){
     {s:'하락갭 — 지지 위',r:'지지 미이탈 → 기존 지지 유지 → 관찰'}
   ];
   var grades=[
-    {g:'S급',f:'월봉',d:'월봉 도지·사건봉·대형 박스',c:'#f59e0b'},
-    {g:'A급',f:'주봉',d:'주봉 도지·사건봉·박스',c:'#c084fc'},
-    {g:'B급',f:'일봉',d:'일봉 도지·사건봉·박스',c:'#60a5fa'},
-    {g:'C급',f:'단기',d:'4시간·1시간 — 참고용',c:'#6b7280'}
+    {
+      g:'S급', f:'월봉', c:'#f59e0b',
+      why:'월봉 하나는 약 20거래일(한 달)의 모든 매매가 압축된 것. 수십만 명의 투자자가 그 가격을 기억.',
+      items:['월봉 도지 종가','월봉 고거래량 사건봉 종가','월봉 대형 박스 상단·하단'],
+      example:'삼성전자 월봉 도지 종가 ₩60,000 → 전 세계 투자자가 해당 가격을 기억 → 수개월 후 재방문 시 강한 반응'
+    },
+    {
+      g:'A급', f:'주봉', c:'#c084fc',
+      why:'주봉 하나는 5거래일(1주)의 합의. 기관·외국인·스윙트레이더가 주로 참고하는 단위.',
+      items:['주봉 도지 종가','주봉 사건봉 종가','주봉 박스 상단·하단'],
+      example:'AAPL 주봉 박스 상단 $185 → 3주 연속 저항 → 이 가격을 기억하는 참여자 많음'
+    },
+    {
+      g:'B급', f:'일봉', c:'#60a5fa',
+      why:'일봉 하나는 하루의 합의. 개인투자자 대부분이 보는 기본 단위. 자동 분석 기본값.',
+      items:['일봉 도지 종가','일봉 사건봉 종가','일봉 박스 상단·하단'],
+      example:'일봉 박스 하단 ₩75,000 → 수일 간 지지 역할 → 하지만 주봉·월봉에 밀릴 수 있음'
+    },
+    {
+      g:'C급', f:'4H·1H', c:'#6b7280',
+      why:'단기 참고용. 상위 프레임 기능선과 충돌 시 항상 상위가 우선. 단독으로 판단 금지.',
+      items:['4시간봉 박스','1시간봉 도지','단기 사건봉'],
+      example:'1시간봉 지지 ₩75,200이 일봉 저항 ₩75,000 근처라면 → 일봉(B급) 저항이 우선'
+    }
   ];
   var strengths=['1순위: 거래량 — 클수록 강하다','2순위: 체류시간 — 오래 머문 구간일수록','3순위: 돌파 후 이동거리 — 이후 추세가 클수록','4순위: 반복 기능 — 반복 수행할수록','5순위: 프레임 — 월봉>주봉>일봉 우선'];
   var removals=['단순 스윙 저점/고점','거래량 없는 조정 저점·반등 고점','현재가와 가깝다는 이유만으로 선택','이동평균선·피보·라운드넘버만 근거','돌파 후 강한 이동 없었던 도지','최근이라는 이유만으로 선택한 저/고점'];
@@ -799,9 +821,28 @@ function buildTheoryPane(){
   +'<div style="margin-bottom:10px"><strong style="color:var(--tx)">추세강화도지</strong><br>추세 중간 에너지 재충전. 상승추세강화도지 = 조정 시 지지후보. 하락추세강화도지 = 반등 시 저항후보.</div>'
   +'<div><strong style="color:var(--tx)">추세반전도지</strong><br>추세 전환 기준점. 재침범 시 새 추세 자체가 훼손 신호.</div>'
   +'</div></div>'
-  +'<div class="ct-card"><div class="ct-card-title">🏆 기능선 格 체계</div><div class="ct-card-body">'
-  +grades.map(function(g){ return '<div style="display:flex;gap:10px;padding:5px 0;border-bottom:1px solid rgba(255,255,255,.05)"><div style="min-width:38px;font-weight:700;color:'+g.c+'">'+g.g+'</div><div><b style="color:var(--tx)">'+g.f+'</b> — '+g.d+'</div></div>'; }).join('')
-  +'</div></div>'
+  +'<div class="ct-card">'
+  +'<div class="ct-card-title">🏆 기능선 格 체계 — 어떤 봉에서 만들어졌는가</div>'
+  +'<div style="font-size:12px;color:var(--mt);line-height:1.7;margin-bottom:10px">'
+  +'같은 가격이라도 <b style="color:var(--tx)">어떤 프레임(봉 단위)에서 만들어진 지지·저항이냐</b>에 따라 힘이 다릅니다.<br>'
+  +'더 큰 프레임 = 더 많은 사람이 더 오래 기억 = 더 강한 반응.'
+  +'</div>'
+  + grades.map(function(g){
+    return '<div style="border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:12px;margin-bottom:10px;background:rgba(255,255,255,.02)">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+    +'<div style="padding:3px 10px;border-radius:20px;background:'+g.c+'22;border:1px solid '+g.c+';font-weight:800;font-size:13px;color:'+g.c+'">'+g.g+'</div>'
+    +'<div style="font-size:14px;font-weight:700;color:var(--tx)">'+g.f+'</div>'
+    +'</div>'
+    +'<div style="font-size:12px;color:var(--mt);margin-bottom:6px">'+g.why+'</div>'
+    +'<div style="font-size:11px;color:#4b5563;margin-bottom:6px">해당되는 것: '
+    +g.items.map(function(i){ return '<span style="background:var(--s1);border:1px solid var(--bd);border-radius:4px;padding:1px 6px;margin:0 2px">'+i+'</span>'; }).join('')
+    +'</div>'
+    +'<div style="font-size:11px;background:rgba(255,255,255,.03);border-left:2px solid '+g.c+';padding:6px 10px;border-radius:0 4px 4px 0;color:var(--mt)">'
+    +'예) '+g.example+'</div>'
+    +'</div>';
+  }).join('')
+  +'<div style="font-size:11px;color:#4b5563;padding:6px 0">⚡ 여러 급수가 같은 가격대에 겹칠수록 더 강한 기능선입니다. S급+A급 겹침 = 매우 강함.</div>'
+  +'</div>'
   +'<div class="ct-card"><div class="ct-card-title">⚡ 전장 강도 평가 5순위</div><div class="ct-card-body">'+strengths.map(function(s){return '• '+s+'<br>';}).join('')+'</div></div>'
   +'<div class="ct-card"><div class="ct-card-title">🗑 후보 제거 규칙</div><div class="ct-card-body">'+removals.map(function(r){return '• <s>'+r+'</s><br>';}).join('')+'</div></div>'
   +'<div class="ct-card"><div class="ct-card-title">🔲 갭 해석 4케이스</div><div class="ct-card-body">'
