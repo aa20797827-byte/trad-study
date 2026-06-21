@@ -897,6 +897,7 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
     <span class="navlbl" style="background:rgba(168,85,247,.13);color:#c084fc">📊 투자 분석</span>
     <button class="mbtn" data-m="topdown">🌊 탑다운</button>
     <button class="mbtn" data-m="ta">📈 기술적분석</button>
+    <button class="mbtn" data-m="chart">🔍 차트술사</button>
     <button class="mbtn" data-m="portfolio">💼 포트폴리오</button>
     <button class="mbtn" data-m="sector">🏭 섹터분석</button>
     <button class="mbtn" data-m="event">🚨 이벤트대응</button>
@@ -1061,6 +1062,8 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 <div class="tdwrap" id="eventwrap"></div>
 <div class="tdwrap" id="macrowrap"></div>
 <div class="tdwrap" id="checklistwrap"></div>
+<!-- CHART THEORY WRAP -->
+<div class="tdwrap" id="chartwrap"></div>
 
 <!-- STATS MODAL -->
 <div class="modal-ov hide" id="stats-modal" onclick="if(event.target===this)this.classList.add('hide')">
@@ -4533,8 +4536,9 @@ function setMode(m){
   const nw=document.getElementById('newswrap');
   const pf=document.getElementById('portfoliowrap'),sc=document.getElementById('sectorwrap');
   const ev=document.getElementById('eventwrap'),mc=document.getElementById('macrowrap'),cl=document.getElementById('checklistwrap');
+  const ct=document.getElementById('chartwrap');
   const gd=document.getElementById('grid'),lv=document.getElementById('listv');
-  [mn,fw,qz,sr,mp,td,ta,rm,ps,tx,ef,us,kr,nw,pf,sc,ev,mc,cl].forEach(el=>{if(el)el.style.display='none';});
+  [mn,fw,qz,sr,mp,td,ta,rm,ps,tx,ef,us,kr,nw,pf,sc,ev,mc,cl,ct].forEach(el=>{if(el)el.style.display='none';});
   fw.classList.remove('on');qz.classList.remove('on');sr.classList.remove('on');mp.classList.remove('on');td.classList.remove('on');
   if(m!=='grid'&&m!=='list'){
     document.querySelectorAll('.lvbtn').forEach(x=>x.classList.remove('on'));
@@ -4561,6 +4565,7 @@ function setMode(m){
   else if(m==='event'){ev.style.display='block';ev.classList.add('on');showEvent();}
   else if(m==='macro'){mc.style.display='block';mc.classList.add('on');showMacro();}
   else if(m==='checklist'){cl.style.display='block';cl.classList.add('on');showChecklist();}
+  else if(m==='chart'){ct.style.display='block';ct.classList.add('on');showChart();}
 }
 
 // ── 이벤트 ──
@@ -4577,7 +4582,7 @@ document.querySelectorAll('.lvbtn').forEach(b=>b.addEventListener('click',()=>{
     curM='grid';
     document.querySelectorAll('.mbtn[data-m]').forEach(x=>x.classList.remove('on'));
     const gb=document.querySelector('.mbtn[data-m="grid"]');if(gb)gb.classList.add('on');
-    ['fcwrap','qzwrap','srwrap','mapwrap','tdwrap','tawrap','roadmapwrap','psychwrap','taxwrap','etfwrap','uswrap','krwrap','newswrap','portfoliowrap','sectorwrap','eventwrap','macrowrap','checklistwrap'].forEach(id=>{
+    ['fcwrap','qzwrap','srwrap','mapwrap','tdwrap','tawrap','roadmapwrap','psychwrap','taxwrap','etfwrap','uswrap','krwrap','newswrap','portfoliowrap','sectorwrap','eventwrap','macrowrap','checklistwrap','chartwrap'].forEach(id=>{
       const el=document.getElementById(id);if(el)el.style.display='none';
     });
     document.getElementById('main').style.display='block';
@@ -4605,6 +4610,7 @@ initQuotes();
 <script src="ta-expert.js"></script>
 <script src="ta-visual.js"></script>
 <script src="terms_viz.js"></script>
+<script src="chart-theory.js"></script>
 
 <!-- 모바일 하단 네비게이션 -->
 <nav class="mob-nav">
