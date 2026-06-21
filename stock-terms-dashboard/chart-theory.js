@@ -1981,6 +1981,61 @@ function generateAnalysis(d){
   if(!slp){ slp=Math.round((e2p||e1p||_s20v)*(_bbLv&&_bbLv<(e2p||_s20v)?1:_slBuf)); slr='2차 진입가 기준 -1.5% 손절'; }
   if(!t1p){ t1p=_bbUv?_bbUv:Math.round((e1p||_s20v)*1.05); t1r='볼린저 상단 또는 +5% 1차 익절 목표'; }
 
+  // ── 보조지표로 각 가격 타점 근거 강화 ──
+  if(d.indicators && e1p){
+    var _i=d.indicators, _rsi=_i.rsi, _mac=_i.macd, _bb2=_i.bb, _s3=_i.sma||{};
+    var _vol2=_i.vol||{}, _cdl2=_i.candle, _mCross=_i.macdCross, _rDiv=_i.rsiDiv;
+
+    // ─ 1차 매수가: 어떤 지표가 이 가격을 지지하는가 ─
+    var e1ind=[];
+    if(_rsi!==null&&_rsi!==undefined){
+      if(_rsi<30)       e1ind.push('RSI '+_rsi+' 극과매도 → 기술적 반등 확률 매우 높음');
+      else if(_rsi<40)  e1ind.push('RSI '+_rsi+' 과매도 → 저점 매수 우위 구간');
+      else if(_rsi<50)  e1ind.push('RSI '+_rsi+' 중립 하방 → 추가 조정 시 과매도 진입 예상');
+      else if(_rsi>65)  e1ind.push('RSI '+_rsi+' 과열권 → 조정 후 진입 권장');
+    }
+    if(_rDiv==='bullish') e1ind.push('RSI 강세 다이버전스 → 상승 반전 선행 신호 (매수 강력 지지)');
+    if(_mCross==='golden') e1ind.push('MACD 골든크로스 발생 → 매수 모멘텀 전환');
+    else if(_mac&&_mac.hist>0&&_mac.line>0) e1ind.push('MACD 양권 → 매수 모멘텀 확인');
+    else if(_mac&&_mac.hist<0&&_mac.hist>(_mac.signal||0)*0.5) e1ind.push('MACD 히스토그램 개선 중 → 반전 준비');
+    if(_bb2&&e1p&&e1p<=_bb2.lower*1.04) e1ind.push('볼린저 하단('+fp(Math.round(_bb2.lower))+') 근처 → 과매도 구간 진입');
+    else if(_bb2&&e1p) e1ind.push('볼린저 밴드 내 위치 → 상단('+fp(Math.round(_bb2.upper))+')까지 여지 있음');
+    if(_s3.s20&&_s3.s60&&_s3.s20>_s3.s60) e1ind.push('MA 정배열(SMA20>SMA60) → 중기 상승 추세 유효');
+    if(_vol2.cur&&_vol2.avg&&_vol2.cur<_vol2.avg*0.65) e1ind.push('거래량 감소 → 눌림 중 매도 압력 약화');
+    if(_cdl2&&_cdl2.sentiment==='bullish') e1ind.push('캔들: '+_cdl2.name+' → 매수 반응 신호');
+    if(_i.patterns&&_i.patterns.length){
+      var bullPt=_i.patterns.filter(function(pt){return pt.type==='bullish';});
+      if(bullPt.length) e1ind.push('차트패턴: '+bullPt.map(function(p){return p.name.split(' ')[0];}).join('·'));
+    }
+    if(e1ind.length) e1r = e1r + '\n→ 지표 근거: '+e1ind.slice(0,3).join(' / ');
+
+    // ─ 2차 매수가: 더 깊은 조정 시 지표 상황 ─
+    var e2ind=[];
+    if(_rsi!==null&&_rsi!==undefined){
+      if(_rsi<40) e2ind.push('RSI '+_rsi+' → 2차 진입 시 더 유리한 과매도 구간 진입');
+      else e2ind.push('RSI '+_rsi+' → 추가 조정 시 '+Math.round(_rsi*0.85)+' 수준 하락 예상, 과매도 진입 가능');
+    }
+    if(_vol2.cur&&_vol2.avg&&_vol2.cur<_vol2.avg*0.65) e2ind.push('거래량 감소 지속 시 매도 압력 완전 소진 확인');
+    if(_bb2) e2ind.push('볼린저 하단('+fp(Math.round(_bb2.lower))+') 근처 또는 이탈 구간 → 강한 반등 포인트');
+    if(e2ind.length) e2r = e2r + '\n→ 지표 근거: '+e2ind.slice(0,2).join(' / ');
+
+    // ─ 손절가: 어떤 지표가 함께 무너지는가 ─
+    var slind=[];
+    if(_s3.s60&&slp&&slp<=_s3.s60*1.01) slind.push('SMA60('+fp(Math.round(_s3.s60))+') 동반 이탈 → 중기 상승 추세 완전 붕괴');
+    if(_bb2&&slp&&slp<=_bb2.lower*0.99) slind.push('볼린저 하단('+fp(Math.round(_bb2.lower))+') 이탈 → 과매도 구간 돌파, 급락 위험');
+    if(_s3.s20&&slp&&slp<_s3.s20) slind.push('SMA20('+fp(Math.round(_s3.s20))+') 하향 이탈 → 단기 추세 전환');
+    slind.push('진입 근거(구조론 지지) 소멸 → 즉시 전량 청산, 새 이유 절대 금지');
+    slr = slr + '\n→ 손절 근거: '+slind.slice(0,3).join(' / ');
+
+    // ─ 1차 익절가: 어떤 저항이 기다리는가 ─
+    var t1ind=[];
+    if(_bb2&&t1p&&t1p>=_bb2.upper*0.96) t1ind.push('볼린저 상단('+fp(Math.round(_bb2.upper))+') = 단기 과매수 경계, 도달 시 조정 주의');
+    if(_s3.s20&&t1p&&Math.abs(t1p-_s3.s20)/_s3.s20<0.03) t1ind.push('SMA20('+fp(Math.round(_s3.s20))+') 저항선 근처');
+    if(_rsi!==null&&_rsi!==undefined) t1ind.push('익절 도달 시 예상 RSI: '+(Math.min(75,(_rsi||50)+20))+' 내외 (과매수 주의)');
+    t1ind.push('종가 기준 돌파 실패 시 1차 익절 / 돌파 성공 시 다음 기능선까지 보유');
+    if(t1ind.length) t1r = t1r + '\n→ 익절 근거: '+t1ind.slice(0,3).join(' / ');
+  }
+
   // ── % 계산 (기준: 1차 진입가) ──
   var slPct   = e1p&&slp  ? _pct(e1p, slp)  : '';
   var e2Diff  = e1p&&e2p  ? _pct(e1p, e2p)  : '';
@@ -2075,23 +2130,39 @@ function generateAnalysis(d){
   +'<div style="font-size:12px;font-weight:700;color:#6b7280">가격</div>'
   +'<div style="font-size:12px;font-weight:700;color:#6b7280;text-align:right">기준 대비</div>'
   +'</div>'
+  // 헬퍼: 근거 텍스트 렌더링 (\n → <br>, 지표 근거 강조)
+  function renderReason(txt){
+    if(!txt) return '';
+    return txt.replace(/\n→ ([^:]+:)/g, function(_,g){ return '<br><span style="color:#60a5fa;font-size:10px;font-weight:700">→ '+g+'</span>'; })
+      .replace(/\n/g,'<br>');
+  }
   // 1차 진입
-  + ptRow(eL1, eC, e1p, 'var(--tx)', '기준가', '#9ca3af', e1r ? e1r.split('.')[0].slice(0,50) : '')
+  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)">'
+  +'<div style="font-size:13px;font-weight:800;color:'+eC+';padding-top:4px">'+eL1+'</div>'
+  +'<div><div style="font-size:21px;font-weight:900;color:var(--tx);line-height:1.2;margin-bottom:4px">'+(e1p?fp(e1p):'—')+'</div>'
+  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(e1r)+'</div></div>'
+  +'<div style="text-align:right;font-size:14px;font-weight:800;color:#9ca3af;padding-top:4px">기준가</div>'
+  +'</div>'
   // 2차 진입
-  + ptRow(eL2, isBuyA?'#4ade80':'#f87171', e2p, 'var(--tx)', e2Diff||'', e2Diff?(parseFloat(e2Diff)<0?'#22c55e':'#ef4444'):'#9ca3af', e2r ? e2r.split('.')[0].slice(0,50) : '')
-  // 손절가 (항상 빨간 음수)
-  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(239,68,68,.05)">'
-  +'<div style="font-size:13px;font-weight:800;color:#ef4444">⛔ 손절가</div>'
-  +'<div><div style="font-size:21px;font-weight:900;color:#ef4444;line-height:1.2">'+(slp?fp(slp):'—')+'</div>'
-  +'<div style="font-size:11px;color:#6b7280;margin-top:3px">종가 기준 이탈 시 즉시 청산</div></div>'
-  +'<div style="text-align:right;font-size:14px;font-weight:800;color:#ef4444">'+(slPct||'')+'</div>'
+  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)">'
+  +'<div style="font-size:13px;font-weight:800;color:'+(isBuyA?'#4ade80':'#f87171')+';padding-top:4px">'+eL2+'</div>'
+  +'<div><div style="font-size:21px;font-weight:900;color:var(--tx);line-height:1.2;margin-bottom:4px">'+(e2p?fp(e2p):'—')+'</div>'
+  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(e2r)+'</div></div>'
+  +'<div style="text-align:right;font-size:14px;font-weight:800;color:'+(e2Diff&&parseFloat(e2Diff)<0?'#22c55e':'#9ca3af')+';padding-top:4px">'+(e2Diff||'')+'</div>'
+  +'</div>'
+  // 손절가
+  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(239,68,68,.05)">'
+  +'<div style="font-size:13px;font-weight:800;color:#ef4444;padding-top:4px">⛔ 손절가</div>'
+  +'<div><div style="font-size:21px;font-weight:900;color:#ef4444;line-height:1.2;margin-bottom:4px">'+(slp?fp(slp):'—')+'</div>'
+  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(slr)+'</div></div>'
+  +'<div style="text-align:right;font-size:14px;font-weight:800;color:#ef4444;padding-top:4px">'+(slPct||'')+'</div>'
   +'</div>'
   // 1차 익절
-  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(59,130,246,.05)">'
-  +'<div style="font-size:13px;font-weight:800;color:#60a5fa">🎯 1차 익절</div>'
-  +'<div><div style="font-size:21px;font-weight:900;color:#60a5fa;line-height:1.2">'+(t1p?fp(t1p):'—')+'</div>'
-  +'<div style="font-size:11px;color:#6b7280;margin-top:3px">'+(t1r||'다음 기능선 도달 시')+'</div></div>'
-  +'<div style="text-align:right;font-size:14px;font-weight:800;color:#60a5fa">'+(tgt1Pct||'')+'</div>'
+  +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(59,130,246,.05)">'
+  +'<div style="font-size:13px;font-weight:800;color:#60a5fa;padding-top:4px">🎯 1차 익절</div>'
+  +'<div><div style="font-size:21px;font-weight:900;color:#60a5fa;line-height:1.2;margin-bottom:4px">'+(t1p?fp(t1p):'—')+'</div>'
+  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(t1r)+'</div></div>'
+  +'<div style="text-align:right;font-size:14px;font-weight:800;color:#60a5fa;padding-top:4px">'+(tgt1Pct||'')+'</div>'
   +'</div>'
   // 푸터 (R:R + 2차 목표)
   +'<div style="padding:10px 16px;background:var(--s1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">'
