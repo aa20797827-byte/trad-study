@@ -130,62 +130,113 @@ window._ctCalcPosition = function(){
 };
 
 // ══════════════════════════════════════
-// ── 한국 주식 이름 검색 (TradingView Symbol Search) ──
+// ── 한국 주식 이름 검색 (로컬 사전 + 네이버 금융) ──
 // ══════════════════════════════════════
 
-// 한글 종목명 → 코드 자동 변환 (Enter/분석 버튼 클릭 시)
-async function _ctResolveKoreanName(query){
-  var box = document.getElementById('ct-tv-box');
-  if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">⏳ "'+query+'" 검색 중...</div>';
-  try {
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ctrl.abort();}, 6000);
-    var url = 'https://symbol-search.tradingview.com/symbol_search/?text='+encodeURIComponent(query)+'&exchange=KRX&lang=ko&type=stock&country=KR';
-    var resp = await fetch(url, {signal:ctrl.signal});
-    clearTimeout(t);
-    if(!resp.ok) throw new Error('검색 실패');
-    var results = await resp.json();
-    if(results.length === 0){ throw new Error('"'+query+'" 검색 결과 없음'); }
+var _KR_DICT=[
+  ['005930','삼성전자','삼성'],['000660','SK하이닉스','하이닉스','sk하이닉스'],
+  ['035420','NAVER','네이버'],['035720','카카오'],
+  ['005380','현대차','현대자동차','현대'],['000270','기아','기아차'],
+  ['005490','POSCO홀딩스','포스코','posco'],['006400','삼성SDI','삼성sdi'],
+  ['051910','LG화학','lg화학'],['066570','LG전자','lg전자'],
+  ['009150','삼성전기'],['042700','한미반도체','한미'],
+  ['207940','삼성바이오로직스','삼성바이오'],['068270','셀트리온'],
+  ['373220','LG에너지솔루션','lg에너지','lges'],['012330','현대모비스','모비스'],
+  ['105560','KB금융','kb금융','kb'],['055550','신한지주','신한'],
+  ['086790','하나금융지주','하나금융','하나'],['316140','우리금융지주','우리금융','우리'],
+  ['017670','SK텔레콤','skt'],['030200','KT','kt'],['033780','KT&G','ktg'],
+  ['003490','대한항공'],['020560','아시아나항공','아시아나'],['011200','HMM','hmm'],
+  ['090430','아모레퍼시픽','아모레'],['259960','크래프톤'],
+  ['247540','에코프로비엠','에코프로비'],['086520','에코프로'],
+  ['010130','고려아연'],['015760','한국전력','한전'],
+  ['034020','두산에너빌리티','두산에너빌'],['028260','삼성물산'],
+  ['032830','삼성생명'],['000810','삼성화재'],['009830','한화솔루션','한화'],
+  ['010140','삼성중공업'],['009540','한국조선해양'],
+  ['329180','HD현대중공업'],['267250','HD현대','hd현대'],
+  ['241560','두산밥캣','밥캣'],['003550','LG','lg'],['034730','SK','sk'],
+  ['096770','SK이노베이션','sk이노'],['003670','포스코퓨처엠','포스코퓨처'],
+  ['138040','메리츠금융지주','메리츠'],['004020','현대제철'],
+  ['036460','한국가스공사','가스공사'],['028050','삼성엔지니어링','삼성엔지'],
+  ['000720','현대건설'],['006360','GS건설','gs건설'],
+  ['097950','CJ제일제당','cj제일'],['036570','엔씨소프트','nc소프트','ncsoft'],
+  ['251270','넷마블'],['263750','펄어비스'],['035900','JYP엔터','jyp'],
+  ['041510','SM엔터테인먼트','sm엔터','sm'],['352820','HYBE','하이브','hybe'],
+  ['000120','CJ대한통운','cj대한'],['001040','CJ','cj'],['004170','신세계'],
+  ['139480','이마트'],['069960','현대백화점','현대백'],
+  ['004990','롯데지주','롯데'],['011170','롯데케미칼'],
+  ['000100','유한양행','유한'],['128940','한미약품','한미약'],
+  ['185750','종근당'],['069620','SK바이오사이언스','sk바이오'],
+  ['196170','알테오젠'],['293490','카카오게임즈','카카오게임'],
+  ['024110','기업은행','ibk'],['091990','셀트리온헬스케어','셀트리온헬스'],
+  ['010950','S-Oil','s오일','에쓰오일'],['016360','삼성증권'],
+  ['039490','키움증권','키움'],['058470','리노공업','리노'],
+  ['006280','녹십자','gc녹십자'],['023530','롯데쇼핑'],
+  ['086280','현대글로비스','글로비스'],['003600','SK케미칼','sk케미칼'],
+  ['272210','한화시스템'],['012450','한화에어로스페이스','한화에어로'],
+  ['035250','강원랜드'],['271560','오리온'],['011780','금호석유','금호'],
+  ['122870','YG엔터테인먼트','yg','와이지'],['000150','두산'],
+  ['138930','BNK금융지주','bnk'],['175330','JB금융지주','jb'],
+  ['298000','효성첨단소재','효성'],['003230','삼양식품','삼양'],
+  ['007070','GS리테일','gs리테일'],['069500','KODEX 200','코덱스200'],
+  ['114800','KODEX 인버스','코덱스인버스'],
+  ['233740','KODEX 코스닥150레버리지','코스닥레버리지','코스닥레버'],
+];
 
-    if(results.length === 1){
-      // 결과 1개면 바로 로드
-      window._ctSelectSym(results[0].symbol);
-    } else {
-      // 결과 여러 개면 드롭다운 표시 (첫 번째 자동 선택 안 함)
-      var inp = document.getElementById('ct-sym-input');
-      if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">아래 종목을 선택하세요</div>';
-      _ctShowSuggest(results.slice(0,8), query);
-      if(inp) inp.focus();
+function _krSearch(q){
+  q=q.toLowerCase().replace(/\s+/g,'');
+  var res=[],seen={};
+  _KR_DICT.forEach(function(e){
+    for(var i=1;i<e.length;i++){
+      if(e[i].toLowerCase().replace(/\s+/g,'').includes(q)&&!seen[e[0]]){
+        res.push({symbol:e[0],description:e[1]}); seen[e[0]]=true; break;
+      }
     }
-  } catch(e){
-    if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:13px">⚠ '+e.message+'</div>';
+  });
+  return res;
+}
+
+async function _naverAC(q){
+  try{
+    var ctrl=new AbortController();
+    setTimeout(function(){ctrl.abort();},5000);
+    var r=await fetch('https://ac.stock.naver.com/ac?q='+encodeURIComponent(q)+'&target=stock',{signal:ctrl.signal});
+    if(!r.ok) return [];
+    var d=await r.json();
+    var out=[];
+    (d.items||[]).flat().forEach(function(item){
+      if(item&&item.length>=2&&/^\d{5,6}$/.test(item[0]))
+        out.push({symbol:item[0],description:item[1]});
+    });
+    return out.slice(0,8);
+  }catch(_){return [];}
+}
+
+var _ctSearchTimer=null;
+
+async function _ctResolveKoreanName(query){
+  var box=document.getElementById('ct-tv-box');
+  if(box) box.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">⏳ "'+query+'" 검색 중...</div>';
+  var res=_krSearch(query);
+  if(!res.length) res=await _naverAC(query);
+  if(!res.length){
+    if(box) box.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#ef4444;font-size:13px">⚠ "'+query+'" 검색 결과 없음 — 종목 코드(숫자)를 직접 입력해보세요.</div>';
+    return;
   }
+  if(res.length===1){ window._ctSelectSym(res[0].symbol); return; }
+  if(box) box.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">아래에서 종목을 선택하세요</div>';
+  _ctShowSuggest(res,query);
 }
 
-var _ctSearchTimer = null;
-
-// 입력값이 한글·영문 회사명이면 자동 검색
-window._ctSearchInput = function(val){
+window._ctSearchInput=function(val){
   clearTimeout(_ctSearchTimer);
-  var isNameSearch = val.length >= 1 && /[가-힣a-zA-Z]/.test(val) && !/^\d{4,6}$/.test(val) && !val.includes(':');
-  if(!isNameSearch){ _ctHideSuggest(); return; }
-  _ctSearchTimer = setTimeout(function(){ _ctDoSearch(val); }, 200);
+  if(!val||!/[가-힣]/.test(val)||/^\d+$/.test(val)||val.includes(':')){ _ctHideSuggest(); return; }
+  var res=_krSearch(val);
+  if(res.length){ _ctShowSuggest(res,val); return; }
+  _ctSearchTimer=setTimeout(async function(){
+    var nr=await _naverAC(val);
+    if(nr.length) _ctShowSuggest(nr,val); else _ctHideSuggest();
+  },250);
 };
-
-async function _ctDoSearch(query){
-  try {
-    var ctrl = new AbortController();
-    var t = setTimeout(function(){ctrl.abort();}, 5000);
-    // TradingView Symbol Search — CORS 허용 (위젯 임베드용 공개 API)
-    var url = 'https://symbol-search.tradingview.com/symbol_search/?text='
-      +encodeURIComponent(query)+'&exchange=KRX&lang=ko&type=stock&country=KR';
-    var resp = await fetch(url, {signal:ctrl.signal});
-    clearTimeout(t);
-    if(!resp.ok) return;
-    var res = await resp.json();
-    _ctShowSuggest(res.slice(0,8), query);
-  } catch(_) { _ctHideSuggest(); }
-}
 
 function _ctShowSuggest(results, query){
   var el = document.getElementById('ct-suggest');
