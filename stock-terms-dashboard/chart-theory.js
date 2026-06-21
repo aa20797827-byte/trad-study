@@ -1961,13 +1961,61 @@ function generateAnalysis(d){
   if(!slp){ slp=Math.round((e2p||e1p||_s20v)*(_bbLv&&_bbLv<(e2p||_s20v)?1:_slBuf)); slr='2차 진입가 기준 -1.5% 손절'; }
   if(!t1p){ t1p=_bbUv?_bbUv:Math.round((e1p||_s20v)*1.05); t1r='볼린저 상단 또는 +5% 1차 익절 목표'; }
 
-  // ── 수익률 계산 ──
   // ── % 계산 (기준: 1차 진입가) ──
-  // 손절% = 1차 진입가 → 손절가 (매수: 음수, 매도: 양수)
-  var slPct   = e1p&&slp  ? _pct(e1p, slp)  : '';   // fix: e1p→slp (음수)
-  var e2Diff  = e1p&&e2p  ? _pct(e1p, e2p)  : '';   // 2차 진입 vs 1차 진입 차이
-  var tgt1Pct = e1p&&t1p  ? _pct(e1p, t1p)  : '';   // 익절% (양수)
+  var slPct   = e1p&&slp  ? _pct(e1p, slp)  : '';
+  var e2Diff  = e1p&&e2p  ? _pct(e1p, e2p)  : '';
+  var tgt1Pct = e1p&&t1p  ? _pct(e1p, t1p)  : '';
   var rr1     = e1p&&slp&&t1p ? _rr(e1p,slp,t1p) : '';
+
+  // ── 지표 기반 포지션 전략 (핵심 추가) ──
+  var posStrategy = (function(){
+    var ind = d.indicators;
+    if(!ind) return null;
+    var rsi=ind.rsi, mac=ind.macd, bb=ind.bb, s=ind.sma||{};
+    var posSize=100, signals=[], condEntry='', adjNote='';
+
+    if(isBuyA){
+      // RSI → 포지션 비중 조정
+      if(rsi!==null&&rsi!==undefined){
+        if(rsi<25)      { posSize=100; signals.push({t:'✅ RSI '+rsi+' 극도 과매도 — 기술적 반등 확률 매우 높음. 표준 비중 100% 진입.',c:'#22c55e'}); }
+        else if(rsi<35) { posSize=100; signals.push({t:'✅ RSI '+rsi+' 과매도 — 반등 확률 높음. 1차 100% 진입.',c:'#22c55e'}); }
+        else if(rsi<50) { posSize=90;  signals.push({t:'📊 RSI '+rsi+' 중립 하방 — 1차 90% 진입, RSI 40 이하 추가 시 2차 분할.',c:'#6b7280'}); }
+        else if(rsi<60) { posSize=75;  signals.push({t:'⚠ RSI '+rsi+' 중립 상방 — 1차 75%만 진입. RSI 50 이하 조정 시 2차 추가.',c:'#f59e0b'}); condEntry='RSI 50 이하로 조정 시 2차 매수 검토'; }
+        else if(rsi<70) { posSize=50;  signals.push({t:'⚠ RSI '+rsi+' 과열권 — 1차 50%만 진입. 단기 조정 후 2차 추가 권장.',c:'#f59e0b'}); condEntry='RSI 55 이하 조정 확인 후 2차 진입'; }
+        else            { posSize=30;  signals.push({t:'❌ RSI '+rsi+' 과매수 — 매수 시점으로 부적합. 비중 30% 제한 또는 대기.',c:'#ef4444'}); condEntry='RSI 65 이하 충분히 조정된 후 진입 재검토'; }
+      }
+      // MACD → 타이밍 조정
+      if(mac){
+        if(mac.hist>0&&mac.line>0)       { signals.push({t:'✅ MACD 양전환(골든크로스) — 매수 모멘텀 확인. 예정 비중 유지.',c:'#22c55e'}); }
+        else if(mac.hist>0&&mac.line<0)  { signals.push({t:'📊 MACD 히스토그램 개선 중 — 전환 준비. 1차 진입 유효.',c:'#6b7280'}); }
+        else if(mac.hist<0&&mac.line<0)  { posSize=Math.round(posSize*0.7); signals.push({t:'⚠ MACD 음권 — 하락 모멘텀 지속. 비중 70%로 축소. 히스토그램 개선 후 추가.',c:'#f59e0b'}); condEntry=(condEntry?condEntry+' / ':'')+'MACD 히스토그램 플러스 전환 후 잔여 비중 추가'; }
+      }
+      // MA 배열 → 추세 확인
+      if(s.s20&&s.s60){
+        if(s.s20>s.s60) { signals.push({t:'✅ MA 정배열(SMA20>SMA60) — 중기 상승 추세 유효. 비중 유지.',c:'#22c55e'}); }
+        else             { posSize=Math.round(posSize*0.65); signals.push({t:'❌ MA 역배열(SMA20<SMA60) — 추세 역행 매수. 비중 65%로 제한. 추세 전환 확인 후 추가.',c:'#ef4444'}); }
+      }
+      // 볼린저밴드 → 과매도/과매수
+      if(bb&&p>0){
+        if(p<=bb.lower*1.02)  { signals.push({t:'✅ 볼린저 하단 근처 — 과매도 구간 진입. 매수 신뢰도 강화. 비중 유지.',c:'#22c55e'}); }
+        if(p>=bb.upper*0.98)  { posSize=Math.round(posSize*0.5); signals.push({t:'❌ 볼린저 상단 근처 — 단기 과매수. 비중 50%로 제한.',c:'#ef4444'}); }
+      }
+    } else {
+      // 매도 포지션
+      if(rsi!==null&&rsi!==undefined){
+        if(rsi>70)      { posSize=100; signals.push({t:'✅ RSI '+rsi+' 과매수 — 매도 신뢰도 높음. 표준 비중.',c:'#22c55e'}); }
+        else if(rsi>60) { posSize=75;  signals.push({t:'📊 RSI '+rsi+' 상승권 — 1차 75% 매도.',c:'#6b7280'}); }
+        else if(rsi<35) { posSize=30;  signals.push({t:'❌ RSI '+rsi+' 과매도 — 매도 위험 구간. 30%만 진입.',c:'#ef4444'}); condEntry='RSI 45 이상 반등 후 매도 재검토'; }
+      }
+      if(mac&&mac.hist<0) { signals.push({t:'✅ MACD 하락 모멘텀 확인 — 매도 신뢰도 강화.',c:'#22c55e'}); }
+      if(s.s20&&s.s60&&s.s20<s.s60) { signals.push({t:'✅ MA 역배열 — 하락 추세 확인, 매도 유리.',c:'#22c55e'}); }
+      if(bb&&p>0&&p<=bb.lower*1.02) { posSize=Math.round(posSize*0.5); signals.push({t:'⚠ 볼린저 하단 근처 — 과매도 구간. 매도 비중 50%로 제한.',c:'#f59e0b'}); }
+    }
+
+    posSize = Math.max(10, Math.min(100, posSize));
+    var sizeColor = posSize>=80?'#22c55e':posSize>=50?'#f59e0b':'#ef4444';
+    return {posSize:posSize, sizeColor:sizeColor, signals:signals, condEntry:condEntry};
+  })();
 
   // ── 출력 빌더 ──
   var color  = finalJudge.includes('매수')?'#22c55e':finalJudge.includes('매도')?'#ef4444':'#f59e0b';
@@ -2063,6 +2111,33 @@ function generateAnalysis(d){
 
   // 가격 테이블
   + priceSummary
+
+  // 지표 기반 포지션 전략 카드
+  +(posStrategy ? (function(){
+    var ps=posStrategy;
+    var html='<div style="margin-bottom:16px;background:var(--bg);border-radius:12px;border:1px solid rgba(255,255,255,.1);padding:16px">';
+    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
+    html+='<div style="font-size:15px;font-weight:800;color:var(--tx)">📊 지표 기반 포지션 전략</div>';
+    html+='<div style="text-align:right">';
+    html+='<div style="font-size:11px;color:#6b7280;margin-bottom:2px">권장 포지션 비중</div>';
+    html+='<div style="font-size:24px;font-weight:900;color:'+ps.sizeColor+'">'+ps.posSize+'%</div>';
+    html+='</div></div>';
+    // 진행 바
+    html+='<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden;margin-bottom:12px">';
+    html+='<div style="height:100%;width:'+ps.posSize+'%;background:'+ps.sizeColor+';border-radius:4px;transition:width .3s"></div>';
+    html+='</div>';
+    // 신호 목록
+    ps.signals.forEach(function(s){
+      html+='<div style="font-size:12px;color:var(--tx);padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.5">'+s.t+'</div>';
+    });
+    // 조건부 진입
+    if(ps.condEntry){
+      html+='<div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;font-size:12px;color:#f59e0b">';
+      html+='⏳ <b>조건부 진입:</b> '+ps.condEntry+'</div>';
+    }
+    html+='</div>';
+    return html;
+  })() : '')
 
   // 근거 분석
   + buildReasonCard(d, fp, d.indicators||{}, isBuyA, (d.indicators||{}).patterns||[])
