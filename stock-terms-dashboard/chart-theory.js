@@ -1706,11 +1706,93 @@ function buildTechSection(ind, cur, fp){
   patterns.forEach(function(pt){bullets.push('<b style="color:#8b5cf6">'+pt.name+'</b> — '+pt.desc.split('.')[0]+'.'); });
   if(obvTrend==='up')bullets.push('<b style="color:#22c55e">OBV 상승</b> — 가격 선행 자금 유입.');
   if(obvTrend==='down')bullets.push('<b style="color:#ef4444">OBV 하락</b> — 가격 선행 자금 이탈.');
-  if(bullets.length) html+=taCard('💡 종합 기술적 의견','#9ca3af',bullets.map(function(b){return '• '+b;}).join('<br>'));
-
+  // 종합 의견은 buildTechSummaryCard()에서 별도 렌더링
   html+='</div>';
   return html;
 }
+
+// ── 기술적 종합 요약 카드 (최상단 표시용) ──
+function buildTechSummaryCard(ind, cur, fp){
+  if(!ind) return '';
+  var rsi=ind.rsi, mac=ind.macd, bb=ind.bb, s=ind.sma||{};
+  var rsiDiv=ind.rsiDiv, macdCross=ind.macdCross, obvTrend=ind.obvTrend;
+  var multi=ind.multiCandle, cdl=ind.candle, patterns=ind.patterns||[];
+
+  var items=[], pos=0, neg=0;
+
+  // MA
+  if(s.s20&&s.s60){
+    if(s.s20>s.s60){items.push({t:'MA 정배열 (골든크로스) — 중기 상승 추세 유효',c:'#22c55e',ok:true});pos++;}
+    else{items.push({t:'MA 역배열 (데드크로스) — 중기 하락 추세',c:'#ef4444',ok:false});neg++;}
+  }
+  if(s.s5&&s.s20){
+    if(s.s5>s.s20){items.push({t:'단기 골든크로스 (5MA>20MA)',c:'#22c55e',ok:true});pos++;}
+    else{items.push({t:'단기 데드크로스 (5MA<20MA)',c:'#ef4444',ok:false});neg++;}
+  }
+  // RSI
+  if(rsi!==null&&rsi!==undefined){
+    if(rsi<30){items.push({t:'RSI '+rsi+' 과매도 — 기술적 반등 확률 높음',c:'#22c55e',ok:true});pos++;}
+    else if(rsi<45){items.push({t:'RSI '+rsi+' 저권역 — 매수 우위',c:'#22c55e',ok:true});pos++;}
+    else if(rsi>70){items.push({t:'RSI '+rsi+' 과매수 — 단기 조정 주의',c:'#ef4444',ok:false});neg++;}
+    else if(rsi>60){items.push({t:'RSI '+rsi+' 상승권 — 과열 주의',c:'#f59e0b',ok:false});}
+    else{items.push({t:'RSI '+rsi+' 중립 — 방향 탐색',c:'#6b7280',ok:true});pos+=0.5;}
+  }
+  if(rsiDiv==='bullish'){items.push({t:'★ RSI 강세 다이버전스 — 상승 반전 선행',c:'#22c55e',ok:true});pos+=1.5;}
+  if(rsiDiv==='bearish'){items.push({t:'★ RSI 약세 다이버전스 — 하락 반전 선행',c:'#ef4444',ok:false});neg+=1.5;}
+  // MACD
+  if(macdCross==='golden'){items.push({t:'★ MACD 골든크로스 — 매수 전환',c:'#22c55e',ok:true});pos+=1.5;}
+  else if(macdCross==='dead'){items.push({t:'★ MACD 데드크로스 — 매도 전환',c:'#ef4444',ok:false});neg+=1.5;}
+  else if(mac){
+    if(mac.hist>0&&mac.line>0){items.push({t:'MACD 양권+히스토 플러스 — 매수 모멘텀',c:'#22c55e',ok:true});pos++;}
+    else if(mac.hist>0){items.push({t:'MACD 히스토그램 개선 — 반전 준비',c:'#22c55e',ok:true});pos+=0.7;}
+    else{items.push({t:'MACD 음권 — 하락 모멘텀',c:'#ef4444',ok:false});neg++;}
+  }
+  // 볼린저
+  if(bb&&cur){
+    if(cur<=bb.lower*1.03){items.push({t:'볼린저 하단 접근 — 과매도 반등 구간',c:'#22c55e',ok:true});pos++;}
+    else if(cur>=bb.upper*0.97){items.push({t:'볼린저 상단 접근 — 과매수 조정 주의',c:'#f59e0b',ok:false});}
+    var bw=bb.middle>0?Math.round((bb.upper-bb.lower)/bb.middle*100):0;
+    if(bw<8){items.push({t:'볼린저 극도 수렴 (폭 '+bw+'%) — 큰 이탈 임박',c:'#f97316',ok:true});pos+=0.5;}
+  }
+  // OBV
+  if(obvTrend==='up'){items.push({t:'OBV 상승 — 가격 선행 자금 유입',c:'#22c55e',ok:true});pos++;}
+  if(obvTrend==='down'){items.push({t:'OBV 하락 — 가격 선행 자금 이탈',c:'#ef4444',ok:false});neg++;}
+  // 캔들
+  if(multi){var mc3=multi.sentiment==='bullish'?'#22c55e':'#ef4444';items.push({t:multi.name+' — '+multi.desc.split('.')[0],c:mc3,ok:multi.sentiment==='bullish'});if(multi.sentiment==='bullish')pos++;else neg++;}
+  else if(cdl&&cdl.name&&cdl.name!=='봉 데이터 부족'){var cc3=cdl.sentiment==='bullish'?'#22c55e':cdl.sentiment==='bearish'?'#ef4444':'#6b7280';items.push({t:cdl.name+' — '+cdl.desc.split('.')[0],c:cc3,ok:cdl.sentiment==='bullish'});if(cdl.sentiment==='bullish')pos++;else if(cdl.sentiment==='bearish')neg++;}
+  // 차트 패턴
+  patterns.forEach(function(pt){
+    var pc=pt.type==='bullish'?'#22c55e':pt.type==='bearish'?'#ef4444':'#8b5cf6';
+    items.push({t:pt.name+' — '+pt.desc.split('.')[0],c:pc,ok:pt.type==='bullish'});
+    if(pt.type==='bullish')pos++;else if(pt.type==='bearish')neg++;
+  });
+
+  if(!items.length) return '';
+
+  var total=pos+neg, strength=total>0?Math.round(pos/total*100):50;
+  var sC=strength>=70?'#22c55e':strength>=45?'#f59e0b':'#ef4444';
+  var sL=strength>=70?'강세 ↑':strength>=45?'중립':'약세 ↓';
+
+  var h='<div style="margin-bottom:14px;background:var(--bg);border:1.5px solid '+sC+'33;border-radius:14px;overflow:hidden">';
+  // 헤더 바
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:'+sC+'0d;border-bottom:1px solid '+sC+'22">';
+  h+='<div style="font-size:14px;font-weight:800;color:var(--tx)">📊 기술적 종합 요약</div>';
+  h+='<div style="display:flex;align-items:center;gap:10px">';
+  h+='<div style="font-size:11px;color:#6b7280">긍정 '+Math.floor(pos)+' / 부정 '+Math.floor(neg)+'</div>';
+  h+='<div style="padding:3px 12px;border-radius:20px;background:'+sC+'22;border:1px solid '+sC+';font-size:13px;font-weight:800;color:'+sC+'">'+sL+' '+strength+'%</div>';
+  h+='</div></div>';
+  // 신호 목록 (2열 그리드)
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:10px 14px">';
+  items.forEach(function(item){
+    h+='<div style="display:flex;align-items:flex-start;gap:6px;padding:5px 4px;border-bottom:1px solid rgba(255,255,255,.04)">';
+    h+='<span style="color:'+item.c+';font-size:13px;flex-shrink:0;margin-top:1px">'+(item.ok?'▲':'▼')+'</span>';
+    h+='<span style="font-size:11px;color:#c5d5e0;line-height:1.5">'+item.t+'</span>';
+    h+='</div>';
+  });
+  h+='</div></div>';
+  return h;
+}
+
 // ══════════════════════════════════════
 // ── 분석 엔진 ──
 // ══════════════════════════════════════
@@ -2277,6 +2359,9 @@ function generateAnalysis(d){
   +'<div style="font-size:22px;font-weight:900;color:'+color+'">'+finalJudge+'</div>'
   +'<div style="font-size:13px;color:var(--mt);margin-top:5px">'+structLabel+' &nbsp;|&nbsp; 현재가 '+(p?'<b style="color:var(--tx)">'+fp(p)+'</b>':'미입력')+' — '+posStr+'</div>'
   +'</div></div>'
+
+  // ── 기술적 종합 요약 (최상단) ──
+  + buildTechSummaryCard(d.indicators, p, fp)
 
   // 가격 테이블
   + priceSummary
