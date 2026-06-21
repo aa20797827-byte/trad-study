@@ -1,4 +1,4 @@
-// ═══ 차트술사 구조론 분석 도구 v3 ═══
+// ═══ 차트 분석 도구 v3 ═══
 // 체결→거래량→종가→사건봉→박스→도지→기능선→지지저항전환→매매시나리오
 
 (function(){
@@ -513,7 +513,7 @@ function generateAnalysis(d){
   var structLabel = (d.structure==='box'?'📦 박스 구간':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세')+' | 格: '+grade;
 
   return '<div style="background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:20px;margin-top:4px">'
-  +'<div style="font-size:15px;font-weight:800;margin-bottom:14px;color:var(--tx)">📊 차트술사 구조론 분석 결과</div>'
+  +'<div style="font-size:15px;font-weight:800;margin-bottom:14px;color:var(--tx)">📊 차트 분석 결과</div>'
   +row('1. 현재 구조', structLabel)
   +row('2. 분석 관점', recommendation)
   +row('3. 가격 위치', (p?fp(p):'미입력')+' — '+posStr)
@@ -531,7 +531,7 @@ function generateAnalysis(d){
   +(d.note?row('참고', d.note):'')
   +'<div style="margin-top:16px;padding:14px;border-radius:8px;background:'+bgC+';border:1.5px solid '+color+';font-size:14px;font-weight:700;color:'+color+'">'
   +'🏁 최종 판단: '+finalJudge+'</div>'
-  +'<div style="margin-top:8px;font-size:10px;color:#4b5563">⚠ 차트술사 구조론 규칙 기반 시나리오입니다. 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
+  +'<div style="margin-top:8px;font-size:10px;color:#4b5563">⚠ 구조론 규칙 기반 시나리오입니다. 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
   +'</div>';
 }
 
@@ -596,8 +596,8 @@ function buildCSS(){
 
 function buildHero(){
   return '<div class="ct-hero">'
-  +'<h2>🔍 차트술사 구조론 분석 도구</h2>'
-  +'<p style="color:var(--mt);font-size:11px">종목 입력 → 자동 분석 | 체결→거래량→종가→사건봉→박스→도지→기능선→시나리오</p>'
+  +'<h2>📊 차트 분석</h2>'
+  +'<p style="color:var(--mt);font-size:11px">종목 입력 → 자동 기술적 분석 | 체결→거래량→종가→사건봉→박스→도지→기능선→시나리오</p>'
   +'</div>';
 }
 
@@ -687,7 +687,7 @@ function buildAnalyzePane(){
   +'</select></div></div></div>'
   +'<div class="ct-form-row"><div class="ct-label">참고 사항</div>'
   +'<textarea id="ct-note" class="ct-input" rows="2" placeholder="뉴스, 특이사항 등"></textarea></div>'
-  +'<button class="ct-btn" onclick="window._ctAnalyze()">🔍 차트술사 구조론으로 분석</button>'
+  +'<button class="ct-btn" onclick="window._ctAnalyze()">📊 차트 분석 실행</button>'
   +'<div id="ct-output"></div>'
   +'</div>';
 }
@@ -723,7 +723,7 @@ function buildTheoryPane(){
   var rules=['종가 기준이 아닌 장중 돌파로 판단하지 않는다.','도지 모양만 보고 매수/매도 결론 내리지 않는다.','박스와 추세를 구분하지 않고 분석하지 않는다.','사건봉 꼬리 끝만 보고 핵심 가격 정하지 않는다.','거래량 없는 돌파를 신뢰도 높게 평가하지 않는다.','기능선 사라졌는데 새 이유 붙여 보유하지 않는다.','갭 자체만 보고 의미 부여하지 않는다.','손절 기준 없이 가능성만 말하지 않는다.','현재가 가깝다는 이유로 지지/저항 선택하지 않는다.'];
 
   return '<div class="ct-pane" data-pane="theory" style="display:none">'
-  +'<div class="ct-card"><div class="ct-card-title">📊 차트술사 구조론 핵심 흐름</div>'
+  +'<div class="ct-card"><div class="ct-card-title">📊 차트 분석 핵심 흐름</div>'
   +steps.map(function(s){ return '<div class="ct-step"><div class="ct-step-n">'+s.n+'</div><div class="ct-step-c"><div class="ct-step-t">'+s.t+'</div>'+s.d+'</div></div>'; }).join('')
   +'</div>'
   +'<div class="ct-card"><div class="ct-card-title">🕯 도지의 종류</div><div class="ct-card-body">'
@@ -747,7 +747,7 @@ function buildTheoryPane(){
   +'<b style="color:#a855f7">안도에 매도</b> = 지지 이탈 종목의 반등 안도감에 매도'
   +'</div></div>'
   +'<div class="ct-card"><div class="ct-card-title">⛔ 절대 금지 규칙</div><div class="ct-card-body">'+rules.map(function(r){return '• '+r+'<br>';}).join('')+'</div></div>'
-  +'<div style="font-size:11px;color:#374151;text-align:center;padding-bottom:8px">차트는 미래 예언이 아닌 시장 참여자들의 합의 역사책이다</div>'
+  +'<div style="font-size:11px;color:#374151;text-align:center;padding-bottom:8px">차트 분석 — 차트는 미래 예언이 아닌 시장 참여자들의 합의 역사책이다</div>'
   +'</div>';
 }
 

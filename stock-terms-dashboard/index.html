@@ -897,7 +897,6 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
     <span class="navlbl" style="background:rgba(168,85,247,.13);color:#c084fc">📊 투자 분석</span>
     <button class="mbtn" data-m="topdown">🌊 탑다운</button>
     <button class="mbtn" data-m="ta">📈 기술적분석</button>
-    <button class="mbtn" data-m="chart">🔍 차트술사</button>
     <button class="mbtn" data-m="portfolio">💼 포트폴리오</button>
     <button class="mbtn" data-m="sector">🏭 섹터분석</button>
     <button class="mbtn" data-m="event">🚨 이벤트대응</button>
@@ -917,6 +916,26 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
     <button class="mbtn" data-m="news">📰 뉴스룸</button>
   </div>
 </div>
+
+<!-- ── 차트 분석 독립 버튼 ── -->
+<div id="cab" onclick="setMode('chart')" role="button" style="
+  display:flex;align-items:center;gap:16px;padding:14px 24px;
+  background:linear-gradient(135deg,#0f2340 0%,#0a1628 100%);
+  border-bottom:2px solid #1e3a5f;cursor:pointer;transition:all .2s;
+  user-select:none;-webkit-user-select:none;">
+  <div style="font-size:30px;flex-shrink:0;line-height:1">📊</div>
+  <div style="flex:1;min-width:0">
+    <div style="font-size:15px;font-weight:800;color:#e2e8f0;letter-spacing:-.2px">차트 분석</div>
+    <div style="font-size:11px;color:#4b7ab0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">종목 입력 → 자동 기술적 분석 · 구조론 시나리오 · TradingView 연동</div>
+  </div>
+  <div style="font-size:11px;color:#3b82f6;flex-shrink:0;font-weight:700;letter-spacing:.5px">OPEN ▶</div>
+</div>
+<style>
+#cab:hover{background:linear-gradient(135deg,#172e52,#0e1f3a)!important;border-color:#2d5a9e!important;}
+#cab.on{background:linear-gradient(135deg,#1e3a8a,#1e40af)!important;border-color:#3b82f6!important;}
+#cab.on>div:last-child{color:#93c5fd!important;}
+</style>
+
 <div class="main" id="main">
   <div id="fundguide" style="display:none"></div>
   <div class="grid" id="grid"></div>
@@ -4539,6 +4558,8 @@ function setMode(m){
   const ct=document.getElementById('chartwrap');
   const gd=document.getElementById('grid'),lv=document.getElementById('listv');
   [mn,fw,qz,sr,mp,td,ta,rm,ps,tx,ef,us,kr,nw,pf,sc,ev,mc,cl,ct].forEach(el=>{if(el)el.style.display='none';});
+  // 차트분석 배너 on 상태 토글
+  const cab=document.getElementById('cab');if(cab)cab.classList.toggle('on',m==='chart');
   fw.classList.remove('on');qz.classList.remove('on');sr.classList.remove('on');mp.classList.remove('on');td.classList.remove('on');
   if(m!=='grid'&&m!=='list'){
     document.querySelectorAll('.lvbtn').forEach(x=>x.classList.remove('on'));
