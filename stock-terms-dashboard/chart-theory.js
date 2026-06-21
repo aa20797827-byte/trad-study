@@ -1379,6 +1379,10 @@ function buildTechSection(ind, cur, fp){
   var rsiC=rsi!==null&&rsi!==undefined?(rsi<30?'#22c55e':rsi>70?'#ef4444':'#f59e0b'):'#6b7280';
   var rsiL=rsi!==null&&rsi!==undefined?(rsi<30?'과매도 (기술적 반등 신호)':rsi>70?'과매수 (단기 조정 주의)':rsi<50?'중립 — 하방 편향':'중립 — 상방 편향'):'N/A';
 
+  // 추세 흐름 bullets (buildTrendFlow 호출)
+  var trendBullets = [];
+  try { trendBullets = buildTrendFlow(ind, closes, cur, fp) || []; } catch(_){}
+
   var html='<div style="margin-top:16px;background:var(--s2);border-radius:14px;border:1px solid var(--bd);padding:18px">';
   html+='<div style="font-size:16px;font-weight:900;color:var(--tx);margin-bottom:16px">📊 기술적 분석 (RSI다이버전스·MACD크로스·OBV·차트패턴 포함)</div>';
 
