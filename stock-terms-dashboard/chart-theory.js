@@ -1370,7 +1370,7 @@ function buildReasonCard(d, fp, ind, isBuyA, patterns){
 
 function _chip(lbl,val,col){
   return '<div style="background:'+col+'18;border:1px solid '+col+'44;border-radius:8px;padding:10px 6px;text-align:center">'
-  +'<div style="font-size:11px;color:#9ca3af;margin-bottom:3px">'+lbl+'</div>'
+  +'<div style="font-size:11px;color:#b0bec5;margin-bottom:3px">'+lbl+'</div>'
   +'<div style="font-size:13px;font-weight:700;color:'+col+'">'+val+'</div></div>';
 }
 function buildTechSection(ind, cur, fp){
@@ -1407,7 +1407,7 @@ function buildTechSection(ind, cur, fp){
     html+=trendBullets.map(function(b){
       return '<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:5px">'
       +'<span style="color:'+b.c+';font-size:13px;flex-shrink:0;margin-top:-1px">●</span>'
-      +'<span style="font-size:11px;color:var(--mt);line-height:1.6">'+b.t+'</span></div>';
+      +'<span style="font-size:12px;color:#c5d5e0;line-height:1.7">'+b.t+'</span></div>';
     }).join('');
     html+='</div>';
   }
@@ -1420,7 +1420,7 @@ function buildTechSection(ind, cur, fp){
       var pc=pt.type==='bullish'?'#22c55e':pt.type==='bearish'?'#ef4444':'#6b7280';
       html+='<div style="margin-bottom:8px;padding:10px 12px;background:'+pc+'0c;border-left:3px solid '+pc+';border-radius:0 8px 8px 0">';
       html+='<div style="font-size:12px;font-weight:700;color:'+pc+';margin-bottom:3px">'+pt.name+'</div>';
-      html+='<div style="font-size:11px;color:var(--mt)">'+pt.desc+'</div>';
+      html+='<div style="font-size:12px;color:#c5d5e0">'+pt.desc+'</div>';
       html+='</div>';
     });
     html+='</div>';
@@ -1436,7 +1436,7 @@ function buildTechSection(ind, cur, fp){
     if(s.s60)  html+=_chip('SMA60', fp(Math.round(s.s60)),  cur>s.s60?'#22c55e':'#ef4444');
     if(s.s120) html+=_chip('SMA120',fp(Math.round(s.s120)), cur>s.s120?'#22c55e':'#ef4444');
     html+='</div>';
-    html+='<div style="font-size:11px;color:var(--mt)">';
+    html+='<div style="font-size:12px;color:#c5d5e0">';
     if(s.s20&&s.s60) html+='• '+(s.s20>s.s60?'<b style="color:#22c55e">골든크로스</b> 상태':'<b style="color:#ef4444">데드크로스</b> 상태')
       +' (SMA20 '+(s.s20>s.s60?'>':'<')+' SMA60)<br>';
     if(s.s20) html+='• 현재가 SMA20 '+(cur>s.s20?'<b style="color:#22c55e">위</b> → 단기 상승':'<b style="color:#ef4444">아래</b> → 단기 조정');
@@ -1454,7 +1454,7 @@ function buildTechSection(ind, cur, fp){
     html+='<div style="position:absolute;inset:0;background:linear-gradient(to right,#22c55e 30%,#f59e0b 60%,#ef4444);opacity:.4"></div>';
     html+='<div style="position:absolute;top:0;left:'+rsiBar+'%;width:3px;height:100%;background:'+rsiC+';border-radius:2px;transform:translateX(-50%)"></div>';
     html+='</div><div style="display:flex;justify-content:space-between;font-size:9px;color:#4b5563;margin-top:2px"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div></div></div>';
-    html+='<div style="font-size:11px;color:var(--mt)">• RSI '+rsi+' → <b style="color:'+rsiC+'">'+rsiL+'</b><br>';
+    html+='<div style="font-size:12px;color:#c5d5e0">• RSI '+rsi+' → <b style="color:'+rsiC+'">'+rsiL+'</b><br>';
     if(rsi<30) html+='→ 30 이하 과매도. 기술적 반등 확률 높음 (단, 강한 하락 추세 중엔 추가 하락 가능)';
     else if(rsi>70) html+='→ 70 이상 과매수. 단기 조정 주의 (단, 강한 상승 추세 중엔 지속 가능)';
     else html+='→ 구조론 기능선 신호와 함께 종합 판단';
@@ -1470,7 +1470,7 @@ function buildTechSection(ind, cur, fp){
     html+=_chip('MACD',    mac.line>0?'+'+mac.line:mac.line,   mac.line>0?'#22c55e':'#ef4444');
     html+=_chip('시그널',  mac.signal>0?'+'+mac.signal:mac.signal, '#60a5fa');
     html+=_chip('히스토그램', mac.hist>0?'+'+mac.hist:mac.hist, mc);
-    html+='</div><div style="font-size:11px;color:var(--mt)">';
+    html+='</div><div style="font-size:12px;color:#c5d5e0">';
     html+='• '+(mac.hist>0?'<b style="color:#22c55e">MACD > 시그널</b> → 매수 모멘텀':'<b style="color:#ef4444">MACD < 시그널</b> → 매도 모멘텀')+'<br>';
     html+='• 히스토그램 '+( Math.abs(mac.hist)>Math.abs(mac.line)*0.15?'확대 → 모멘텀 가속':'축소 → 모멘텀 약화, 추세 전환 주의');
     html+='</div></div>';
@@ -1490,7 +1490,7 @@ function buildTechSection(ind, cur, fp){
     html+='<div style="height:7px;background:linear-gradient(to right,#22c55e,#6b7280,#ef4444);border-radius:3px;position:relative;margin-bottom:5px">';
     html+='<div style="position:absolute;top:-2px;left:'+Math.min(Math.max(bpct,1),99)+'%;width:5px;height:11px;background:#fff;border-radius:2px;transform:translateX(-50%)"></div>';
     html+='</div>';
-    html+='<div style="font-size:11px;color:var(--mt)">';
+    html+='<div style="font-size:12px;color:#c5d5e0">';
     if(cur>=bb.upper*0.97) html+='• 밴드 상단 근처 → 과매수 또는 강한 상승. 단기 조정 주의<br>';
     else if(cur<=bb.lower*1.03) html+='• 밴드 하단 근처 → 과매도 또는 강한 하락. 반등 탐색<br>';
     else if(cur>bb.middle) html+='• 중선 위 — 상승 편향<br>';
@@ -1505,7 +1505,7 @@ function buildTechSection(ind, cur, fp){
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
     html+='<div style="font-size:11px;font-weight:700;color:#f97316;margin-bottom:6px">🕯 최근 캔들 패턴</div>';
     html+='<div style="margin-bottom:4px"><span style="padding:3px 10px;background:'+cc+'18;border:1px solid '+cc+'44;border-radius:10px;font-size:12px;font-weight:700;color:'+cc+'">'+cdl.name+'</span></div>';
-    html+='<div style="font-size:11px;color:var(--mt)">• '+cdl.desc+'</div></div>';
+    html+='<div style="font-size:12px;color:#c5d5e0">• '+cdl.desc+'</div></div>';
   }
 
   // 8. 거래량
@@ -1514,7 +1514,7 @@ function buildTechSection(ind, cur, fp){
     var vc=vr>2?'#f59e0b':vr>1.2?'#22c55e':'#6b7280';
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
     html+='<div style="font-size:11px;font-weight:700;color:#84cc16;margin-bottom:6px">📊 거래량</div>';
-    html+='<div style="font-size:11px;color:var(--mt)">• 평균 대비 <b style="color:'+vc+'">'+vr+'배</b><br>';
+    html+='<div style="font-size:12px;color:#c5d5e0">• 평균 대비 <b style="color:'+vc+'">'+vr+'배</b><br>';
     if(vr>2) html+='→ 거래량 급증 — 수급 집중. 방향 확인 필수';
     else if(vr>1.2) html+='→ 거래량 증가 — 참여자 증가. 추세 신뢰도 상승';
     else if(vr<0.6) html+='→ 거래량 감소 — 매도 압력 약화. 눌림·반등 구간에선 긍정적';
@@ -2141,34 +2141,34 @@ function generateAnalysis(d){
   +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)">'
   +'<div style="font-size:13px;font-weight:800;color:'+eC+';padding-top:4px">'+eL1+'</div>'
   +'<div><div style="font-size:21px;font-weight:900;color:var(--tx);line-height:1.2;margin-bottom:4px">'+(e1p?fp(e1p):'—')+'</div>'
-  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(e1r)+'</div></div>'
+  +'<div style="font-size:12px;color:#c9d1d9;line-height:1.7">'+renderReason(e1r)+'</div></div>'
   +'<div style="text-align:right;font-size:14px;font-weight:800;color:#9ca3af;padding-top:4px">기준가</div>'
   +'</div>'
   // 2차 진입
   +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)">'
   +'<div style="font-size:13px;font-weight:800;color:'+(isBuyA?'#4ade80':'#f87171')+';padding-top:4px">'+eL2+'</div>'
   +'<div><div style="font-size:21px;font-weight:900;color:var(--tx);line-height:1.2;margin-bottom:4px">'+(e2p?fp(e2p):'—')+'</div>'
-  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(e2r)+'</div></div>'
+  +'<div style="font-size:12px;color:#c9d1d9;line-height:1.7">'+renderReason(e2r)+'</div></div>'
   +'<div style="text-align:right;font-size:14px;font-weight:800;color:'+(e2Diff&&parseFloat(e2Diff)<0?'#22c55e':'#9ca3af')+';padding-top:4px">'+(e2Diff||'')+'</div>'
   +'</div>'
   // 손절가
   +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(239,68,68,.05)">'
   +'<div style="font-size:13px;font-weight:800;color:#ef4444;padding-top:4px">⛔ 손절가</div>'
   +'<div><div style="font-size:21px;font-weight:900;color:#ef4444;line-height:1.2;margin-bottom:4px">'+(slp?fp(slp):'—')+'</div>'
-  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(slr)+'</div></div>'
+  +'<div style="font-size:12px;color:#c9d1d9;line-height:1.7">'+renderReason(slr)+'</div></div>'
   +'<div style="text-align:right;font-size:14px;font-weight:800;color:#ef4444;padding-top:4px">'+(slPct||'')+'</div>'
   +'</div>'
   // 1차 익절
   +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05);background:rgba(59,130,246,.05)">'
   +'<div style="font-size:13px;font-weight:800;color:#60a5fa;padding-top:4px">🎯 1차 익절</div>'
   +'<div><div style="font-size:21px;font-weight:900;color:#60a5fa;line-height:1.2;margin-bottom:4px">'+(t1p?fp(t1p):'—')+'</div>'
-  +'<div style="font-size:11px;color:#9ca3af;line-height:1.6">'+renderReason(t1r)+'</div></div>'
+  +'<div style="font-size:12px;color:#c9d1d9;line-height:1.7">'+renderReason(t1r)+'</div></div>'
   +'<div style="text-align:right;font-size:14px;font-weight:800;color:#60a5fa;padding-top:4px">'+(tgt1Pct||'')+'</div>'
   +'</div>'
   // 푸터 (R:R + 2차 목표)
   +'<div style="padding:10px 16px;background:var(--s1);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">'
   +(rr1?'<div style="font-size:14px"><span style="color:#6b7280">리스크:리워드</span> <span style="font-weight:900;color:var(--tx)">R:R '+rr1+'</span></div>':'<div></div>')
-  +(t2r?'<div style="font-size:12px;color:#9ca3af">2차 목표: '+t2r+'</div>':'')
+  +(t2r?'<div style="font-size:12px;color:#c9d1d9">2차 목표: '+t2r+'</div>':'')
   +'</div>'
   +'</div>';
 
@@ -2242,7 +2242,7 @@ function generateAnalysis(d){
 
   // 거래량/갭/지지저항 요약
   +'<div style="padding:12px 16px;background:var(--bg);border-radius:10px;border:1px solid rgba(255,255,255,.06);margin-bottom:4px">'
-  +'<div style="font-size:13px;color:var(--mt);line-height:2.1">'
+  +'<div style="font-size:13px;color:#c5d5e0;line-height:2.1">'
   +'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">거래량</span>'+volText+'</div>'
   +(gapText?'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">갭</span>'+gapText+'</div>':'')
   +(supportC.length?'<div><span style="font-size:12px;font-weight:700;color:#22c55e;min-width:54px;display:inline-block">지지</span>'+supportC.slice(0,2).join(' / ')+'</div>':'')
@@ -2356,10 +2356,10 @@ function buildCSS(){
   +'.ct-box-t{font-size:12px;font-weight:700;color:var(--tx);margin-bottom:10px}'
   +'.ct-card{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:14px;margin-bottom:12px}'
   +'.ct-card-title{font-size:13px;font-weight:700;color:var(--tx);margin-bottom:8px}'
-  +'.ct-card-body{font-size:12px;color:var(--mt);line-height:1.75}'
+  +'.ct-card-body{font-size:13px;color:#c5d5e0;line-height:1.8}'
   +'.ct-step{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.05)}'
   +'.ct-step-n{min-width:26px;height:26px;border-radius:50%;background:var(--ac);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}'
-  +'.ct-step-c{font-size:12px;color:var(--mt)}'
+  +'.ct-step-c{font-size:12px;color:#c5d5e0}'
   +'.ct-step-t{font-weight:700;color:var(--tx);font-size:12px;margin-bottom:2px}'
   +'.ct-sym-bar{display:flex;gap:8px;margin-bottom:12px}'
   +'.ct-sym-in{flex:1;padding:9px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:13px}'
