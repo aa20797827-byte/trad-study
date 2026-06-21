@@ -445,20 +445,26 @@ window._ctAutoAnalyze = async function(symbol){
 
   var ticker = toYahooTicker(symbol);
 
-  // ── 0순위: TradingView 스캐너 API (CORS 허용, 한국·미국 모두 지원) ──
-  out.innerHTML = loading(symbol + ' (TradingView)');
-  var tvData = await fetchTradingViewScan(symbol);
+  // ── 0순위: TradingView 스캐너 API ──
+  out.innerHTML = loading(symbol + ' (TradingView 스캐너)');
+  var tvData = null, tvErr = '';
+  try {
+    tvData = await fetchTradingViewScan(symbol);
+  } catch(e){ tvErr = e.message; }
+
   if(tvData){
-    var aData = tvScanToAnalysis(tvData);
-    var tvHtml = buildDetectedBadge(aData, aData.currentPrice, tvData.currency, tvData.name)
-      + generateAnalysis(aData);
-    out.innerHTML = tvHtml + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
-    fillForm(aData);
-    fetchNews(ticker).then(function(news){
-      var el=document.getElementById('ct-news-area');
-      if(el) el.innerHTML = buildNewsCard(news);
-    });
-    return;
+    try {
+      var aData = tvScanToAnalysis(tvData);
+      var tvHtml = buildDetectedBadge(aData, aData.currentPrice, tvData.currency, tvData.name)
+        + generateAnalysis(aData);
+      out.innerHTML = tvHtml + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
+      fillForm(aData);
+      fetchNews(ticker).then(function(news){
+        var el=document.getElementById('ct-news-area');
+        if(el) el.innerHTML = buildNewsCard(news);
+      });
+      return;
+    } catch(e){ tvErr = 'parse:'+e.message; tvData = null; }
   }
 
   // ── 1순위: 네이버 금융 (한국 주식) ──
@@ -544,9 +550,12 @@ window._ctAutoAnalyze = async function(symbol){
   }
 
   // ── 전부 실패 — 인라인 직접 입력으로 전환 ──
-  var errSummary = pingDiag
-    +' | quote:'+(workerDeployed?wRes.error:'skipped')
-    +' | proxy:'+(fetched.errors||[]).filter(Boolean).slice(0,1).join('');
+  var errSummary = [
+    'TV:'+(tvData?'ok':tvErr||'CORS차단'),
+    'Naver:'+(typeof naver!=='undefined'?(naver?'ok':'실패'):'미시도'),
+    'Worker:'+(workerDeployed?wRes.error:'미배포'),
+    'Proxy:'+(fetched&&fetched.errors?fetched.errors.filter(Boolean)[0]||'차단':'차단')
+  ].join(' | ');
   out.innerHTML = '<div style="margin-top:12px;border-radius:14px;overflow:hidden;border:1px solid var(--bd)">'
   +'<div style="padding:12px 16px;background:rgba(239,68,68,.08);border-bottom:1px solid rgba(239,68,68,.2);display:flex;align-items:center;gap:10px">'
   +'<span style="font-size:18px">⚠</span>'
