@@ -157,6 +157,89 @@ async function fetchYahoo(ticker){
   return {data:null, errors:lastErrors};
 }
 
+// ── Stooq.com 시세 (Yahoo Finance 차단 시 대안) ──
+function toStooqSym(raw){
+  var sym = raw.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
+  if(/^\d{4,6}$/.test(sym)) return sym+'.ko';  // 한국 주식
+  if(/^BTC/.test(sym)||/^ETH/.test(sym)) return null; // 암호화폐 미지원
+  return sym.toLowerCase()+'.us';              // 미국 주식
+}
+
+async function fetchStooq(rawSym){
+  var stooqSym = toStooqSym(rawSym);
+  if(!stooqSym) return null;
+  var currency = stooqSym.endsWith('.ko') ? 'KRW' : 'USD';
+  var baseUrl = 'https://stooq.com/q/d/l/?s='+encodeURIComponent(stooqSym)+'&i=d&l=130';
+  var proxies = [
+    'https://corsproxy.io/?'+encodeURIComponent(baseUrl),
+    'https://api.allorigins.win/raw?url='+encodeURIComponent(baseUrl),
+    'https://api.allorigins.win/get?url='+encodeURIComponent(baseUrl),
+  ];
+  for(var i=0; i<proxies.length; i++){
+    try {
+      var ctrl = new AbortController();
+      var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
+      var resp = await fetch(proxies[i], {signal: ctrl.signal});
+      clearTimeout(timer);
+      if(!resp.ok) continue;
+      var text = await resp.text();
+      // allorigins /get 래핑 처리
+      if(text.charAt(0)==='{'){
+        try { var j=JSON.parse(text); if(j.contents) text=j.contents; } catch(e){}
+      }
+      var rows = parseStooqCSV(text);
+      if(rows && rows.length >= 5){
+        return {
+          closes:   rows.map(function(r){return r.c;}),
+          opens:    rows.map(function(r){return r.o;}),
+          highs:    rows.map(function(r){return r.h;}),
+          lows:     rows.map(function(r){return r.l;}),
+          vols:     rows.map(function(r){return r.v;}),
+          curPrice: rows[rows.length-1].c,
+          currency: currency,
+          name:     stooqSym.toUpperCase(),
+          source:   'Stooq'
+        };
+      }
+    } catch(e){ continue; }
+  }
+  return null;
+}
+
+function parseStooqCSV(csv){
+  var lines = csv.trim().split('\n');
+  if(lines.length < 2) return null;
+  var h = lines[0].toLowerCase().split(',');
+  var di=h.indexOf('date'),oi=h.indexOf('open'),hi=h.indexOf('high'),li=h.indexOf('low'),ci=h.indexOf('close'),vi=h.indexOf('volume');
+  if(ci===-1) return null;
+  var rows=[];
+  for(var i=1;i<lines.length;i++){
+    var p=lines[i].split(',');
+    if(p.length<5) continue;
+    var c=parseFloat(p[ci]);
+    if(!c||c<=0) continue;
+    rows.push({o:parseFloat(p[oi])||c, h:parseFloat(p[hi])||c, l:parseFloat(p[li])||c, c:c, v:parseInt(p[vi])||0});
+  }
+  // Stooq는 최신이 앞, 역순 필요
+  if(rows.length>1 && rows[0].c !== rows[rows.length-1].c) rows.reverse();
+  return rows.length>=5 ? rows : null;
+}
+
+// ── 분석 결과 표시 공통 함수 ──
+function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, currency, name, source){
+  var aData = computeAutoAnalysis(closes, opens, highs, lows, vols, curPrice);
+  aData.currency = currency;
+  aData.note = name+' | '+ticker+' | 일봉 자동 감지 ('+(source||'Yahoo Finance')+')';
+  var newsPromise = fetchNews(ticker);
+  var html = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
+  out.innerHTML = html + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
+  fillForm(aData);
+  newsPromise.then(function(news){
+    var el=document.getElementById('ct-news-area');
+    if(el) el.innerHTML = buildNewsCard(news);
+  });
+}
+
 // 자동 분석 메인 함수
 window._ctAutoAnalyze = async function(symbol){
   var out = document.getElementById('ct-auto-output');
@@ -164,81 +247,70 @@ window._ctAutoAnalyze = async function(symbol){
   out.innerHTML = loading(symbol);
 
   var ticker = toYahooTicker(symbol);
-  var fetched = await fetchYahoo(ticker);
 
-  // 한국 KOSDAQ fallback
-  if(!fetched.data && /^\d{6}\.KS$/.test(ticker)){
-    var fetched2 = await fetchYahoo(ticker.replace('.KS','.KQ'));
-    if(fetched2.data) fetched = fetched2;
-    else fetched.errors = (fetched.errors||[]).concat(fetched2.errors||[]);
+  // ── 1순위: Cloudflare Worker ──
+  var wRes = await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 12000);
+  if(wRes.ok){
+    try {
+      var res=wRes.ok.chart.result[0], meta=res.meta, q=res.indicators.quote[0];
+      var pairs=(res.timestamp||[]).map(function(_,i){return{c:q.close[i],o:q.open[i],h:q.high[i],l:q.low[i],v:q.volume[i]};})
+        .filter(function(d){return d.c!=null&&d.h!=null&&d.l!=null&&+d.c>0;});
+      if(pairs.length>=5){
+        _showAnalysis(out, ticker,
+          pairs.map(function(d){return+d.c;}), pairs.map(function(d){return+d.o;}),
+          pairs.map(function(d){return+d.h;}), pairs.map(function(d){return+d.l;}),
+          pairs.map(function(d){return+d.v||0;}),
+          meta.regularMarketPrice||pairs[pairs.length-1].c,
+          meta.currency||'KRW', meta.shortName||ticker, 'Cloudflare Worker');
+        return;
+      }
+    } catch(e){}
   }
 
-  if(!fetched.data){
-    var errInfo = (fetched.errors||[]).filter(Boolean).slice(0,3).join(' / ');
-    out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px">'
-    +'<div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px">⚠ 시세 데이터 수집 불가</div>'
-    +'<div style="font-size:12px;color:var(--mt);line-height:1.7;margin-bottom:12px">'
-    +'Yahoo Finance CORS 차단으로 자동 수집에 실패했습니다.<br>'
-    +(errInfo?'<span style="font-size:10px;color:#4b5563">진단: '+errInfo+'</span><br>':'')
-    +'</div>'
-    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
-    +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;padding:10px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
-    +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;padding:10px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance에서 확인</a>'
-    +'</div>'
-    +'<div style="margin-top:10px;font-size:11px;color:#4b5563">TradingView 차트는 위에서 정상 표시됩니다. 가격·박스를 읽어 직접 입력 탭에 넣으면 분석이 실행됩니다.</div>'
-    +'</div>';
+  // ── 2순위: Yahoo Finance CORS 프록시 ──
+  var fetched = await fetchYahoo(ticker);
+  if(!fetched.data && /^\d{6}\.KS$/.test(ticker)){
+    var f2 = await fetchYahoo(ticker.replace('.KS','.KQ'));
+    if(f2.data) fetched=f2;
+    else fetched.errors=(fetched.errors||[]).concat(f2.errors||[]);
+  }
+  if(fetched.data){
+    try {
+      var res2=fetched.data.chart.result[0], meta2=res2.meta, q2=res2.indicators.quote[0];
+      var pairs2=(res2.timestamp||[]).map(function(_,i){return{c:q2.close[i],o:q2.open[i],h:q2.high[i],l:q2.low[i],v:q2.volume[i]};})
+        .filter(function(d){return d.c!=null&&d.h!=null&&d.l!=null&&+d.c>0;});
+      if(pairs2.length>=5){
+        _showAnalysis(out, ticker,
+          pairs2.map(function(d){return+d.c;}), pairs2.map(function(d){return+d.o;}),
+          pairs2.map(function(d){return+d.h;}), pairs2.map(function(d){return+d.l;}),
+          pairs2.map(function(d){return+d.v||0;}),
+          meta2.regularMarketPrice||pairs2[pairs2.length-1].c,
+          meta2.currency||'KRW', meta2.shortName||ticker, 'Yahoo Finance');
+        return;
+      }
+    } catch(e){}
+  }
+
+  // ── 3순위: Stooq.com (Yahoo Finance 대안 데이터) ──
+  out.innerHTML = loading(symbol + ' (Stooq 전환 중...)');
+  var stooq = await fetchStooq(symbol);
+  if(stooq && stooq.closes.length>=5){
+    _showAnalysis(out, ticker, stooq.closes, stooq.opens, stooq.highs, stooq.lows, stooq.vols,
+      stooq.curPrice, stooq.currency, stooq.name, 'Stooq');
     return;
   }
 
-  try {
-    var res  = fetched.data.chart.result[0];
-    var meta = res.meta;
-    var q    = res.indicators.quote[0];
-
-    // 날짜 동기화: 행 단위로 null 제거 (closes/vols 인덱스 불일치 방지)
-    var pairs = (res.timestamp||[]).map(function(_,i){
-      return {c:q.close[i], o:q.open[i], h:q.high[i], l:q.low[i], v:q.volume[i]};
-    }).filter(function(d){
-      return d.c!=null && d.o!=null && d.h!=null && d.l!=null
-          && +d.c>0 && +d.h>0 && +d.l>0;
-    });
-    var closes = pairs.map(function(d){return +d.c;});
-    var opens  = pairs.map(function(d){return +d.o;});
-    var highs  = pairs.map(function(d){return +d.h;});
-    var lows   = pairs.map(function(d){return +d.l;});
-    var vols   = pairs.map(function(d){return +d.v||0;});
-
-    // closes 정의 이후에 길이 체크 (이전 순서 버그 수정)
-    if(closes.length < 5){
-      out.innerHTML = '<div style="padding:12px;color:#f59e0b;font-size:12px">⚠ 데이터 부족. 수동 분석 탭을 이용해 주세요.</div>';
-      return;
-    }
-
-    var curPrice = meta.regularMarketPrice || closes[closes.length-1];
-    var currency = meta.currency || 'KRW';
-    var name     = meta.shortName || ticker;
-
-    var aData = computeAutoAnalysis(closes, opens, highs, lows, vols, curPrice);
-    aData.currency = currency;
-    aData.note = name + ' | ' + ticker + ' | 일봉 6개월 자동 감지 (Yahoo Finance)';
-
-    // 분석 + 뉴스 병렬 fetch
-    var newsPromise = fetchNews(ticker);
-    var analysisHtml = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
-    out.innerHTML = analysisHtml + '<div id="ct-news-area"><div style="padding:12px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
-
-    // 구조론 분석 폼에도 값 채워 넣기
-    fillForm(aData);
-
-    // 뉴스 완료 후 삽입
-    newsPromise.then(function(news){
-      var newsEl = document.getElementById('ct-news-area');
-      if(newsEl) newsEl.innerHTML = buildNewsCard(news);
-    });
-
-  } catch(e){
-    out.innerHTML = '<div style="padding:12px;color:#ef4444;font-size:12px">⚠ 분석 오류: '+e.message+'</div>';
-  }
+  // ── 전부 실패 ──
+  var errSummary = ['Cloudflare Worker: '+wRes.error].concat((fetched.errors||[]).filter(Boolean)).slice(0,4).join(' / ');
+  out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:10px">'
+  +'<div style="font-size:13px;font-weight:700;color:#ef4444;margin-bottom:8px">⚠ 시세 데이터 수집 불가 (Yahoo Finance + Stooq 모두 실패)</div>'
+  +'<div style="font-size:11px;color:#4b5563;margin-bottom:12px">진단: '+errSummary+'</div>'
+  +'<div style="display:flex;gap:8px;flex-wrap:wrap">'
+  +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;min-width:140px;padding:10px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
+  +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;min-width:140px;padding:10px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance 확인</a>'
+  +'</div>'
+  +'<div style="margin-top:8px;font-size:11px;color:#4b5563">TradingView 차트에서 가격을 확인 후 직접 입력 탭에 입력하면 분석 가능합니다.</div>'
+  +'</div>';
 };
 
 // 로딩 표시
