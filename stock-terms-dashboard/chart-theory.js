@@ -52,8 +52,9 @@ window._ctChangeSymbol = function(){
   var intSel = document.getElementById('ct-int-select');
   if(intSel) _ctInterval = intSel.value;
   if(!sym) return;
+  // 숫자만 → 한국 주식 (KRX: 붙임)
+  // 영문 포함 → 미국주식/암호화폐: TradingView가 자동 해석하므로 그대로 사용
   if(/^\d+$/.test(sym)) sym = 'KRX:'+sym;
-  else if(!sym.includes(':') && !/\.(KS|KQ)$/.test(sym) && !/[A-Z]{1,5}-[A-Z]{3}/.test(sym)) sym = 'KRX:'+sym;
   _ctSymbol = sym; _tvLoaded = false;
   var box = document.getElementById('ct-tv-box');
   if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">차트 로딩 중...</div>';
@@ -66,14 +67,19 @@ window._ctChangeSymbol = function(){
 // ── 자동 분석 (Yahoo Finance) ──
 // ══════════════════════════════════════
 
-// KRX:005930 → 005930.KS 등으로 변환
+// TradingView 심볼 → Yahoo Finance 티커 변환
 function toYahooTicker(sym){
-  sym = sym.toUpperCase().replace('KRX:','').replace('KRSE:','').trim();
+  // KRX:/KRSE: 등 거래소 접두사 제거
+  sym = sym.toUpperCase().replace(/^(KRX|KRSE|NASDAQ|NYSE|AMEX|BINANCE|COINBASE):/,'').trim();
+  // 한국 주식 (6자리 숫자)
   if(/^\d{6}$/.test(sym)) return sym + '.KS';
-  if(/\.(KS|KQ)$/.test(sym)) return sym;
-  if(sym==='BTC'||sym==='BTCUSDT'||sym==='BTC-USD') return 'BTC-USD';
-  if(sym==='ETH'||sym==='ETHUSDT'||sym==='ETH-USD') return 'ETH-USD';
-  return sym; // US stocks: AAPL, TSLA, etc.
+  if(/^\d{4,6}\.KS$/.test(sym)||/^\d{4,6}\.KQ$/.test(sym)) return sym;
+  // 암호화폐
+  if(sym.endsWith('USDT')) return sym.replace('USDT','-USD');
+  if(sym==='BTC'||sym==='BTC-USD') return 'BTC-USD';
+  if(sym==='ETH'||sym==='ETH-USD') return 'ETH-USD';
+  // 미국 주식 (영문 1~5자) — 그대로 Yahoo에 전달
+  return sym;
 }
 
 // Yahoo Finance 데이터 페치 (CORS 프록시 2단 fallback)
