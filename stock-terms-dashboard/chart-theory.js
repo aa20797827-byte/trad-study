@@ -129,6 +129,70 @@ window._ctCalcPosition = function(){
     +(riskPct>5?'<div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;font-size:11px;color:#ef4444">⚠ 최대 손실이 계좌의 '+riskPct+'%입니다. 통상 1~2% 이하 권장.</div>':'');
 };
 
+// ══════════════════════════════════════
+// ── 한국 주식 이름 검색 (TradingView Symbol Search) ──
+// ══════════════════════════════════════
+
+var _ctSearchTimer = null;
+
+// 입력값이 한글·영문 회사명이면 자동 검색
+window._ctSearchInput = function(val){
+  clearTimeout(_ctSearchTimer);
+  var isNameSearch = val.length >= 1 && /[가-힣a-zA-Z]/.test(val) && !/^\d{4,6}$/.test(val) && !val.includes(':');
+  if(!isNameSearch){ _ctHideSuggest(); return; }
+  _ctSearchTimer = setTimeout(function(){ _ctDoSearch(val); }, 200);
+};
+
+async function _ctDoSearch(query){
+  try {
+    var ctrl = new AbortController();
+    var t = setTimeout(function(){ctrl.abort();}, 5000);
+    // TradingView Symbol Search — CORS 허용 (위젯 임베드용 공개 API)
+    var url = 'https://symbol-search.tradingview.com/symbol_search/?text='
+      +encodeURIComponent(query)+'&exchange=KRX&lang=ko&type=stock&country=KR';
+    var resp = await fetch(url, {signal:ctrl.signal});
+    clearTimeout(t);
+    if(!resp.ok) return;
+    var res = await resp.json();
+    _ctShowSuggest(res.slice(0,8), query);
+  } catch(_) { _ctHideSuggest(); }
+}
+
+function _ctShowSuggest(results, query){
+  var el = document.getElementById('ct-suggest');
+  if(!el) return;
+  if(!results.length){ _ctHideSuggest(); return; }
+  el.innerHTML = results.map(function(r){
+    return '<div onclick="window._ctSelectSym(\''+r.symbol+'\')" style="'
+      +'display:flex;align-items:center;justify-content:space-between;'
+      +'padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--bd)"'
+      +' onmouseover="this.style.background=\'var(--s2)\'"'
+      +' onmouseout="this.style.background=\'transparent\'">'
+      +'<div><div style="font-size:14px;font-weight:700;color:var(--tx)">'+r.description+'</div>'
+      +'<div style="font-size:11px;color:#6b7280">KRX:'+r.symbol+'</div></div>'
+      +'<div style="font-size:12px;color:#6b7280">'+r.symbol+'</div>'
+      +'</div>';
+  }).join('');
+  el.style.display='block';
+}
+
+function _ctHideSuggest(){
+  var el=document.getElementById('ct-suggest');
+  if(el) el.style.display='none';
+}
+
+window._ctSelectSym = function(code){
+  var inp=document.getElementById('ct-sym-input');
+  if(inp) inp.value=code;
+  _ctHideSuggest();
+  window._ctChangeSymbol();
+};
+
+// 외부 클릭 시 드롭다운 닫기
+document.addEventListener('click', function(e){
+  if(!e.target.closest('#ct-suggest') && !e.target.closest('#ct-sym-input')) _ctHideSuggest();
+});
+
 // ── 탭 전환 ──
 window._ctSwitchTab = function(id){
   _ctTab = id;
@@ -2679,8 +2743,16 @@ function buildChartPane(){
   return '<div class="ct-pane" data-pane="chart" style="display:none">'
 
   // 심볼 바
-  +'<div class="ct-sym-bar" style="margin-bottom:10px">'
-  +'<input id="ct-sym-input" class="ct-sym-in" placeholder="종목코드 (005930, AAPL)" value="005930" onkeydown="if(event.key===\'Enter\')window._ctChangeSymbol()">'
+  +'<div class="ct-sym-bar" style="margin-bottom:10px;position:relative">'
+  +'<div style="position:relative;flex:1">'
+  +'<input id="ct-sym-input" class="ct-sym-in" style="width:100%" placeholder="종목명 또는 코드 (삼성전자, 하이닉스, 005930, AAPL)" value="005930"'
+  +' oninput="window._ctSearchInput(this.value)"'
+  +' onkeydown="if(event.key===\'Enter\'){window._ctHideSuggest();window._ctChangeSymbol();}">'
+  // 자동완성 드롭다운
+  +'<div id="ct-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;'
+  +'background:var(--s1);border:1.5px solid var(--ac);border-top:none;border-radius:0 0 10px 10px;'
+  +'max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>'
+  +'</div>'
   +'<select id="ct-int-select" class="ct-sym-in" style="max-width:80px">'
   +'<option value="5">5분</option><option value="15">15분</option><option value="60">1시간</option>'
   +'<option value="D" selected>일봉</option><option value="W">주봉</option><option value="M">월봉</option>'
