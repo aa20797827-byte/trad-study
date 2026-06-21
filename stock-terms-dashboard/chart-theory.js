@@ -110,7 +110,13 @@ async function tvScan(sym){
   var tvSym=toTVSym(sym);
   var isKR=/^\d{4,6}$/.test(tvSym.replace('KRX:',''));
   var url='https://scanner.tradingview.com/'+(isKR?'korea':'america')+'/scan';
-  var cols=['close','SMA20','SMA50','RSI','MACD.hist','BB.upper','BB.lower','High.1M','Low.1M','High.3M','Low.3M'];
+  var cols=['close','open','high','low','volume','change',
+    'SMA5','SMA20','SMA50','SMA100',
+    'RSI','RSI[1]','RSI[2]',
+    'MACD.macd','MACD.signal','MACD.hist',
+    'BB.upper','BB.middle','BB.lower',
+    'High.1M','Low.1M','High.3M','Low.3M',
+    'average_volume_10d_calc','Recommend.All'];
   try{
     var ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},6000);
     var r=await fetch(url,{
@@ -344,21 +350,93 @@ async function fetchTradingViewScan(symbol){
   } catch(_){ clearTimeout(timer); return null; }
 }
 
+// TradingView 스캐너 데이터로 차트 패턴 감지
+function tvDetectPatterns(r, cur){
+  var pts = [];
+  var h1=r['High.1M']||0, l1=r['Low.1M']||0;
+  var h3=r['High.3M']||0, l3=r['Low.3M']||0;
+  var bb=r['BB.upper']&&r['BB.lower']?{u:r['BB.upper'],l:r['BB.lower'],m:r['BB.middle']||r['SMA20']||0}:null;
+  var rsi=r.RSI, rsi1=r['RSI[1]'], rsi2=r['RSI[2]'];
+
+  // 1. 볼린저 밴드 스퀴즈 (수렴)
+  if(bb&&bb.m){
+    var bw=(bb.u-bb.l)/bb.m*100;
+    if(bw<5) pts.push({name:'볼린저 극도 수렴 (Tight Squeeze)',desc:'밴드 폭 '+Math.round(bw)+'% — 큰 방향성 이탈 임박. 이탈 방향이 다음 추세 결정.',type:'neutral'});
+    else if(bw<10) pts.push({name:'볼린저 수렴 (BB Squeeze)',desc:'밴드 폭 '+Math.round(bw)+'% 수렴 — 에너지 압축 중. 돌파 방향 주목.',type:'neutral'});
+  }
+
+  // 2. 1개월 고점·저점 근접 (지지/저항 테스트)
+  if(h1&&cur>=h1*0.98) pts.push({name:'1개월 고점 저항 테스트 (Monthly High)',desc:'현재가('+Math.round(cur)+')가 1개월 고점('+Math.round(h1)+') 근접. 돌파 시 강한 상승, 저항 시 조정.',type:'neutral'});
+  if(l1&&cur<=l1*1.02) pts.push({name:'1개월 저점 지지 테스트 (Monthly Low)',desc:'현재가('+Math.round(cur)+')가 1개월 저점('+Math.round(l1)+') 근접. 지지 시 반등, 이탈 시 추가 하락.',type:'neutral'});
+
+  // 3. 추세 비교 (1개월 vs 3개월 고점·저점)
+  if(h1&&h3&&l1&&l3){
+    if(h1>h3*0.97&&l1>l3*0.97) pts.push({name:'단기 상승 추세 (Higher High·Higher Low)',desc:'1개월 고점·저점이 3개월 대비 높아짐 → 상승 추세 진행 중. 눌림 시 매수 유효.',type:'bullish'});
+    if(h1<h3*0.97&&l1<l3*0.97) pts.push({name:'단기 하락 추세 (Lower High·Lower Low)',desc:'1개월 고점·저점이 3개월 대비 낮아짐 → 하락 추세 진행 중. 반등 시 신중 접근.',type:'bearish'});
+  }
+
+  // 4. RSI 다이버전스 (3개의 RSI 값으로 추론)
+  if(rsi!==null&&rsi1!==null&&rsi2!==null){
+    var rsiRising = rsi>rsi1&&rsi1>rsi2;    // RSI 지속 상승
+    var rsiFalling = rsi<rsi1&&rsi1<rsi2;   // RSI 지속 하락
+    if(rsiRising&&cur<(h1||cur)*0.97) pts.push({name:'RSI 강세 다이버전스 추정 (Bullish Divergence)',desc:'RSI('+Math.round(rsi*10)/10+'>'+Math.round(rsi1*10)/10+'>'+Math.round(rsi2*10)/10+') 3봉 연속 상승 + 가격 저점권 → 상승 반전 가능성.',type:'bullish'});
+    if(rsiFalling&&cur>(l1||0)*1.02) pts.push({name:'RSI 약세 다이버전스 추정 (Bearish Divergence)',desc:'RSI('+Math.round(rsi*10)/10+'<'+Math.round(rsi1*10)/10+'<'+Math.round(rsi2*10)/10+') 3봉 연속 하락 + 가격 고점권 → 하락 반전 가능성.',type:'bearish'});
+  }
+
+  // 5. MACD 크로스 (현재 히스토그램 + 이전 상태 추론)
+  var macdH=r['MACD.hist'], macdM=r['MACD.macd'], macdS=r['MACD.signal'];
+  if(macdH!==null&&macdM!==null&&macdS!==null){
+    if(macdH>0&&macdM<0) pts.push({name:'MACD 데드크로스 후 히스토그램 반전',desc:'MACD 라인 음권이나 히스토그램 플러스 전환 → 하락 모멘텀 약화, 반전 준비 신호.',type:'bullish'});
+    if(macdH<0&&macdM>0) pts.push({name:'MACD 골든크로스 후 히스토그램 꺾임',desc:'MACD 라인 양권이나 히스토그램 마이너스 → 상승 모멘텀 약화, 조정 신호.',type:'bearish'});
+  }
+
+  // 6. TradingView 종합 추천 기반
+  var rec=r['Recommend.All'];
+  if(rec!==null&&rec!==undefined){
+    if(rec>=0.5) pts.push({name:'TradingView 강한 매수 추천 (Strong Buy)',desc:'TradingView 기술적 지표 종합 점수 '+Math.round(rec*100)/100+' (Strong Buy). 다수 지표 매수 신호.',type:'bullish'});
+    else if(rec>=0.1) pts.push({name:'TradingView 매수 추천 (Buy)',desc:'TradingView 기술적 지표 종합 점수 '+Math.round(rec*100)/100+' (Buy).',type:'bullish'});
+    else if(rec<=-0.5) pts.push({name:'TradingView 강한 매도 추천 (Strong Sell)',desc:'TradingView 기술적 지표 종합 점수 '+Math.round(rec*100)/100+' (Strong Sell).',type:'bearish'});
+    else if(rec<=-0.1) pts.push({name:'TradingView 매도 추천 (Sell)',desc:'TradingView 기술적 지표 종합 점수 '+Math.round(rec*100)/100+' (Sell).',type:'bearish'});
+  }
+
+  return pts;
+}
+
 // TradingView 스캔 결과 → 분석 데이터로 변환
 function tvScanToAnalysis(tv){
   var r = tv.r;
   var cur = r.close;
-  // 박스 경계: 1개월 고/저 사용
-  var bu = r['High.1M']||0, bl = r['Low.1M']||0, bc = r.BB&&r['BB.middle']||Math.round((bu+bl)/2)||0;
-  // 추세 판단
+  var bu = r['High.1M']||0, bl = r['Low.1M']||0;
+  var bc = r['BB.middle']||Math.round((bu+bl)/2)||0;
   var s20=r.SMA20||0, s50=r.SMA50||0;
   var structure = (cur>s20&&s20>s50)?'trend-up':(cur<s20&&s20<s50)?'trend-down':'box';
-  // avgVol
-  var avgVol = r['average_volume_10d_calc']||r['average_volume_30d_calc']||0;
+  var avgVol = r['average_volume_10d_calc']||0;
   var curVol  = r.volume||0;
   var volLevel = curVol>avgVol*1.8?'high':curVol<avgVol*0.6?'low':'normal';
-  var volCtx   = cur>(bu*0.99)?'breakout':cur<(bl*1.01)?'breakdown':
-                 (r.change>0)?'bounce':'pullback';
+  var volCtx   = cur>(bu*0.99)?'breakout':cur<(bl*1.01)?'breakdown':(r.change>0)?'bounce':'pullback';
+
+  // MACD 크로스 감지
+  var macdCross = null;
+  var mH=r['MACD.hist'], mM=r['MACD.macd'], mS=r['MACD.signal'];
+  if(mM!==null&&mS!==null){
+    if(mM>mS&&mM-mS<Math.abs(mM)*0.2) macdCross='golden'; // 골든크로스 직후 추정
+    else if(mM<mS&&mS-mM<Math.abs(mS)*0.2) macdCross='dead';
+  }
+
+  // RSI 다이버전스 추정
+  var rsiDiv=null, rsi=r['RSI'], rsi1=r['RSI[1]'], rsi2=r['RSI[2]'];
+  if(rsi!==null&&rsi1!==null&&rsi2!==null){
+    if(rsi>rsi1&&rsi1>rsi2&&cur<(bl||cur)*1.05) rsiDiv='bullish';
+    if(rsi<rsi1&&rsi1<rsi2&&cur>(bu||cur)*0.95) rsiDiv='bearish';
+  }
+
+  // 차트 패턴 감지
+  var patterns = tvDetectPatterns(r, cur);
+
+  // 이격도
+  var devs={};
+  if(s20&&cur) devs.s20=(cur-s20)/s20*100;
+  if(s50&&cur) devs.s60=(cur-s50)/s50*100;
 
   return {
     structure:structure, frame:'daily',
@@ -368,16 +446,15 @@ function tvScanToAnalysis(tv){
     eventClose:0, volLevel:volLevel, volContext:volCtx,
     gap:'none', retest:'pending', currency:tv.currency,
     note: tv.name+' | TradingView 스캐너',
-    // 지표 직접 주입 (computeIndicators 대신)
     indicators:{
       sma:{s5:r.SMA5, s20:r.SMA20, s60:r.SMA50, s120:r.SMA100},
       rsi: r.RSI, bb:{upper:r['BB.upper'],middle:r['BB.middle'],lower:r['BB.lower']},
-      macd:{line:r['MACD.macd'],signal:r['MACD.signal'],hist:r['MACD.hist']},
-      candle:{name:'최신봉',desc:'',sentiment:r.change>0?'bullish':'bearish'},
-      vol:{cur:Math.round(curVol),avg:Math.round(avgVol)},
-      trend:structure,
-      patterns:[], rsiDiv:null, macdCross:null, obvTrend:null,
-      multiCandle:null, maSlopes:{s5:0,s20:0,s60:0}, devs:{},
+      macd:{line:r['MACD.macd']||null, signal:r['MACD.signal']||null, hist:r['MACD.hist']||null},
+      candle:{name:'최신봉 '+((r.change||0)>0?'▲양봉':'▼음봉'), desc:'전일 대비 '+(r.change?((r.change>0?'+':'')+r.change.toFixed(2)+'%'):'±0%'), sentiment:(r.change||0)>0?'bullish':'bearish'},
+      vol:{cur:Math.round(curVol), avg:Math.round(avgVol)},
+      trend:structure, patterns:patterns,
+      rsiDiv:rsiDiv, macdCross:macdCross, obvTrend:null,
+      multiCandle:null, maSlopes:{s5:0,s20:0,s60:0}, devs:devs,
       closes:[], highs:[], lows:[],
     }
   };
