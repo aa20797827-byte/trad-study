@@ -297,23 +297,53 @@ window._ctSwitchTab = function(id){
   if(id==='history'){ setTimeout(renderHistory, 50); }
 };
 
-// ── TradingView 초기화 ──
+// ── 차트 초기화 (한국주식: 네이버금융 / 해외: TradingView) ──
 function initTV(){
   var isDark = !document.body.classList.contains('light');
   var container = document.getElementById('ct-tv-box');
   if(!container) return;
   container.innerHTML = '';
-  var s = document.createElement('script');
-  s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-  s.async = true;
-  s.textContent = JSON.stringify({
-    autosize:true, symbol:_ctSymbol, interval:_ctInterval,
-    timezone:'Asia/Seoul', theme:document.body.classList.contains('light')?'light':'dark',
-    style:'1', locale:'kr', withdateranges:true,
-    hide_side_toolbar:false, allow_symbol_change:true,
-    details:true, support_host:'https://www.tradingview.com'
-  });
-  container.appendChild(s);
+
+  // 한국 주식 감지 (KRX:XXXXXX 형태)
+  var isKorean = /^KRX:\d{5,6}$/.test(_ctSymbol);
+
+  if(isKorean){
+    // 네이버 금융 차트 (로그인 불필요, 한국 주식 완벽 지원)
+    var code = _ctSymbol.replace('KRX:','');
+    var iframe = document.createElement('iframe');
+    // 봉 단위 변환 (네이버 파라미터)
+    var tf = {D:'day',W:'week',M:'month'}[_ctInterval] || 'day';
+    iframe.src = 'https://finance.naver.com/item/fchart.nhn?code='+code;
+    iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;background:#1e2a3a';
+    iframe.setAttribute('scrolling','no');
+    iframe.setAttribute('frameborder','0');
+    // 네이버 차트 위에 봉 단위 안내 + 네이버 링크
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'position:relative;height:100%;display:flex;flex-direction:column';
+    var toolbar = document.createElement('div');
+    toolbar.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--s1);border-bottom:1px solid var(--bd);font-size:12px;flex-shrink:0';
+    toolbar.innerHTML = '<span style="color:var(--mt)">📊 네이버 금융 차트 — KRX:'+code+'</span>'
+      +'<a href="https://finance.naver.com/item/main.nhn?code='+code+'" target="_blank" style="color:var(--ac);text-decoration:none;font-weight:600">네이버에서 열기 ↗</a>';
+    var iframeWrap = document.createElement('div');
+    iframeWrap.style.cssText = 'flex:1;overflow:hidden';
+    iframeWrap.appendChild(iframe);
+    wrapper.appendChild(toolbar);
+    wrapper.appendChild(iframeWrap);
+    container.appendChild(wrapper);
+  } else {
+    // 해외주식/암호화폐 → TradingView
+    var s = document.createElement('script');
+    s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    s.async = true;
+    s.textContent = JSON.stringify({
+      autosize:true, symbol:_ctSymbol, interval:_ctInterval,
+      timezone:'Asia/Seoul', theme:isDark?'dark':'light',
+      style:'1', locale:'kr', withdateranges:true,
+      hide_side_toolbar:false, allow_symbol_change:true,
+      details:true, support_host:'https://www.tradingview.com'
+    });
+    container.appendChild(s);
+  }
 }
 
 // ── 심볼 변경 ──
