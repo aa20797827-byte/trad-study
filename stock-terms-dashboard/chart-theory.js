@@ -127,8 +127,15 @@ function _raceSuccess(promises){
   });
 }
 
-// Yahoo Finance 데이터 페치 — 5개 프록시 병렬, query1/query2 순차 fallback
+// Yahoo Finance 데이터 페치
+// 1순위: 자체 Cloudflare Worker (/api/quote) — 서버 측 직접 호출, CORS 없음
+// 2순위: 외부 CORS 프록시 5개 병렬 fallback
 async function fetchYahoo(ticker){
+  // ── 1순위: 자체 Cloudflare Pages Function ──
+  var workerResult = await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 12000);
+  if(workerResult.ok) return {data:workerResult.ok, errors:[]};
+
+  // ── 2순위: 외부 CORS 프록시 병렬 시도 ──
   var yUrls = [
     'https://query1.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=6mo&includePrePost=false',
     'https://query2.finance.yahoo.com/v8/finance/chart/'+ticker+'?interval=1d&range=6mo&includePrePost=false',
@@ -140,12 +147,12 @@ async function fetchYahoo(ticker){
     function(u){ return 'https://api.allorigins.win/get?url='+encodeURIComponent(u); },
     function(u){ return 'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(u); },
   ];
-  var lastErrors = [];
+  var lastErrors = ['worker:'+workerResult.error];
   for(var yi=0; yi<yUrls.length; yi++){
     var u = yUrls[yi];
     var r = await _raceSuccess(mkProxy.map(function(mk){ return _tryFetch(mk(u), 12000); }));
     if(r.ok) return {data:r.ok, errors:[]};
-    lastErrors = r.errors;
+    lastErrors = lastErrors.concat(r.errors||[]);
   }
   return {data:null, errors:lastErrors};
 }
