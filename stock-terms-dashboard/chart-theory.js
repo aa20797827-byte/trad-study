@@ -250,8 +250,14 @@ window._ctAutoAnalyze = async function(symbol){
 
   var ticker = toYahooTicker(symbol);
 
+  // ── 0순위: Worker 배포 확인 (/ping) ──
+  var pingRes = await _tryFetch('/ping', 5000);
+  var workerDeployed = !!(pingRes.ok && pingRes.ok.worker);
+
   // ── 1순위: Cloudflare Worker ──
-  var wRes = await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 12000);
+  var wRes = workerDeployed
+    ? await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 15000)
+    : {error:'worker_not_deployed'};
   if(wRes.ok){
     try {
       var res=wRes.ok.chart.result[0], meta=res.meta, q=res.indicators.quote[0];
@@ -303,15 +309,17 @@ window._ctAutoAnalyze = async function(symbol){
   }
 
   // ── 전부 실패 ──
-  var workerOk = wRes.error !== 'Failed to fetch' && wRes.error !== 'net';
-  var errSummary = ['Worker: '+wRes.error].concat((fetched.errors||[]).filter(Boolean)).slice(0,3).join(' | ');
+  var workerStatus = workerDeployed ? '✅ 배포됨' : '❌ 미배포 또는 오류';
+  var errSummary = 'Worker: '+(workerDeployed?wRes.error:'not_deployed')
+    +' | '+(fetched.errors||[]).filter(Boolean).slice(0,2).join(' | ');
   out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px">'
   +'<div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">⚠ 시세 데이터 수집 불가</div>'
-  // 원인 설명
-  +(!workerOk ? '<div style="padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;margin-bottom:10px;font-size:12px;color:#f59e0b">'
-  +'<b>원인:</b> Cloudflare Worker(_worker.js)가 아직 배포 완료되지 않았거나 Pages 재배포가 필요합니다.<br>'
-  +'Cloudflare Pages 대시보드에서 이 사이트를 재배포(Redeploy)하면 해결됩니다.</div>' : '')
-  +'<div style="font-size:11px;color:#4b5563;margin-bottom:12px">진단: '+errSummary+'</div>'
+  +'<div style="padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--mt)">'
+  +'Cloudflare Worker: <b>'+workerStatus+'</b><br>'
+  +(workerDeployed&&wRes.error?'Yahoo Finance 응답 실패 — Stooq 폴백도 실패<br>':'')
+  +(!workerDeployed?'→ Cloudflare Pages가 아직 _worker.js를 배포하지 않았을 수 있습니다.<br>페이지를 새로고침하거나 잠시 후 다시 시도하세요.':'')
+  +'</div>'
+  +'<div style="font-size:10px;color:#4b5563;margin-bottom:12px">진단: '+errSummary+'</div>'
   +'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">'
   +'<button onclick="window._ctSwitchTab(\'analyze\')" style="flex:1;min-width:140px;padding:11px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">🔍 직접 입력으로 분석</button>'
   +'<a href="https://finance.yahoo.com/quote/'+ticker+'" target="_blank" style="flex:1;min-width:140px;padding:11px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;font-size:12px;font-weight:600;text-decoration:none;display:flex;align-items:center;justify-content:center">📊 Yahoo Finance에서 가격 확인</a>'
