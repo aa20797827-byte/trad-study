@@ -1125,6 +1125,38 @@ function generateAnalysis(d){
       removedC=[{price:'최근 단순 스윙 저점', reason:'거래량/체류시간 근거 없는 단기 저점'}];
       finalJudge='대기 → 되돌림 확인 후 매도';
     }
+  } else if(d.indicators && d.indicators.sma && d.indicators.sma.s20){
+    // 박스/도지 미감지 시 보조지표(SMA/볼린저) 기반 전략
+    var _i=d.indicators, _s20=Math.round(_i.sma.s20), _s60=_i.sma.s60?Math.round(_i.sma.s60):Math.round(_s20*0.95);
+    var _bbU=_i.bb?Math.round(_i.bb.upper):Math.round(_s20*1.05), _bbL=_i.bb?Math.round(_i.bb.lower):Math.round(_s20*0.95);
+    if(d.structure==='trend-up'){
+      posStr='상승 추세 — SMA 눌림 구간';
+      recommendation='20일/60일 이평 기반 눌림 매수 전략';
+      finalJudge=p<=_s20*1.01?'매수 가능 (SMA20 눌림 진입)':'대기 (SMA20 눌림 대기)';
+      scenarios=['시나리오 A: SMA20('+fp(_s20)+') 지지 확인 → 재상승 → 볼린저 상단('+fp(_bbU)+') 목표',
+                 '시나리오 B: SMA20 이탈 → SMA60('+fp(_s60)+') 재확인 → SMA60 이탈 시 즉시 손절'];
+      entries=['1차: SMA20 '+fp(_s20)+' 근처', '2차: SMA60 '+fp(_s60)+' (추가 조정 시)'];
+      stopLoss='SMA60('+fp(_s60)+') 아래 종가 이탈 시 즉시 손절';
+      targets=['1차: 볼린저 상단 '+fp(_bbU), '2차: 직전 고점'];
+    } else if(d.structure==='trend-down'){
+      posStr='하락 추세 — SMA 반등 매도 구간';
+      recommendation='20일/60일 이평 기반 반등 매도 전략';
+      finalJudge=p>=_s20*0.99?'매도 가능 (SMA20 반등 매도)':'대기 (SMA20 반등 대기)';
+      scenarios=['시나리오 A: SMA20('+fp(_s20)+') 저항 확인 → 재하락 → 볼린저 하단('+fp(_bbL)+') 목표',
+                 '시나리오 B: SMA20 돌파 → SMA60('+fp(_s60)+') 재확인 → SMA60 돌파 시 즉시 손절'];
+      entries=['1차: SMA20 '+fp(_s20)+' 근처', '2차: SMA60 '+fp(_s60)+' (추가 반등 시)'];
+      stopLoss='SMA60('+fp(_s60)+') 위 종가 돌파 시 즉시 손절';
+      targets=['1차: 볼린저 하단 '+fp(_bbL), '2차: 직전 저점'];
+    } else {
+      posStr='횡보 — 볼린저 밴드 기준 박스 구간';
+      recommendation='볼린저 밴드 하단 매수 / 상단 매도 전략';
+      finalJudge=p<=_bbL*1.02?'매수 가능 (볼린저 하단 근처)':p>=_bbU*0.98?'매도 가능 (볼린저 상단 근처)':'대기 (중립 구간)';
+      scenarios=['시나리오 A: 볼린저 하단('+fp(_bbL)+') 지지 → SMA20 회복 → 상단('+fp(_bbU)+') 목표',
+                 '시나리오 B: 볼린저 하단 이탈 → SMA20 -3% 손절'];
+      entries=['1차: 볼린저 하단 '+fp(_bbL)+' 근처', '2차: 하단 -1% 추가 진입'];
+      stopLoss='볼린저 하단('+fp(_bbL)+') -2% 이탈 시 손절';
+      targets=['1차: SMA20 '+fp(_s20)+' (중선)', '2차: 볼린저 상단 '+fp(_bbU)];
+    }
   } else {
     posStr='기능선 미특정'; recommendation='박스 경계 또는 도지 상단/종가/하단을 입력해 주세요.';
     finalJudge='무포지션 (기능선 미특정)';
@@ -1149,9 +1181,14 @@ function generateAnalysis(d){
 
   var _rnd2 = function(v){ return Math.round(v*100)/100; };
   var e1p=0,e1r='', e2p=0,e2r='', slp=0,slr='', t1p=0,t1r='', t2r='';
-  var isBuyA = finalJudge.includes('매수') || finalJudge.indexOf('눌림')>-1;
+  var isBuyA = finalJudge.includes('매수') || finalJudge.indexOf('눌림')>-1 || d.structure==='trend-up'&&!finalJudge.includes('매도');
   var _slBuf = 0.985; // 손절 버퍼 1.5% (2차 매수가와 구분)
   var _slBufS = 1.015; // 매도 손절 버퍼 (위로)
+
+  // 지표 기반 가격 (박스/도지 미감지 시 폴백용)
+  var _ind2=d.indicators||{}, _s2=(_ind2.sma||{});
+  var _s20v=_s2.s20?Math.round(_s2.s20):0, _s60v=_s2.s60?Math.round(_s2.s60):0;
+  var _bbUv=_ind2.bb?Math.round(_ind2.bb.upper):0, _bbLv=_ind2.bb?Math.round(_ind2.bb.lower):0;
 
   if(hasDoji){
     if(p>=dl && p<=du){
@@ -1239,7 +1276,30 @@ function generateAnalysis(d){
       t1r='직전 저점 또는 다음 지지 기능선 — 종가 이탈 실패 시 1차 익절';
       t2r='추세 하락 가속 후 다음 기능선까지 보유';
     }
+  } else if(_s20v){
+    // 박스/도지 미감지 → 보조지표 기반 가격 설정
+    if(isBuyA){
+      e1p=_s20v; e1r='SMA20('+fp(_s20v)+') = 20일 이동평균 지지선. 단기 상승 추세 기준선 — 눌림 1차 매수 타점.';
+      e2p=_s60v||Math.round(_s20v*0.96); e2r='SMA60('+fp(_s60v||Math.round(_s20v*0.96))+') = 60일 이평 지지선 — 더 깊은 조정 시 2차 매수 타점.';
+      slp=_s60v?Math.round(_s60v*0.985):Math.round(_s20v*0.965);
+      slr='SMA60('+fp(_s60v)+') 아래 종가 이탈 → 중기 상승 추세 붕괴. 즉시 손절.';
+      t1p=_bbUv||Math.round(_s20v*1.06); t1r='볼린저 상단('+fp(_bbUv||Math.round(_s20v*1.06))+') = 단기 과매수 구간. 1차 익절 타점.';
+      t2r='볼린저 상단 돌파 후 다음 저항까지 보유';
+    } else {
+      e1p=_s20v; e1r='SMA20('+fp(_s20v)+') = 20일 이동평균 저항선. 하락 추세 중 반등 — 1차 매도 타점.';
+      e2p=_s60v||Math.round(_s20v*1.04); e2r='SMA60('+fp(_s60v||Math.round(_s20v*1.04))+') = 60일 이평 저항선 — 더 깊은 반등 시 2차 매도 타점.';
+      slp=_s60v?Math.round(_s60v*1.015):Math.round(_s20v*1.035);
+      slr='SMA60('+fp(_s60v)+') 위 종가 돌파 → 하락 추세 훼손. 즉시 손절.';
+      t1p=_bbLv||Math.round(_s20v*0.94); t1r='볼린저 하단('+fp(_bbLv||Math.round(_s20v*0.94))+') = 단기 과매도 구간. 1차 익절 타점.';
+      t2r='볼린저 하단 이탈 후 다음 지지까지 보유';
+    }
   }
+
+  // ── 최종 폴백: 어떤 경우에도 가격이 항상 표시되도록 ──
+  if(!e1p&&_s20v){ e1p=_s20v; e1r='SMA20 기반 진입 타점'; }
+  if(!e2p){ e2p=_s60v?_s60v:Math.round((e1p||_s20v)*0.97); e2r='SMA60 또는 1차 진입가 -3% 타점'; }
+  if(!slp){ slp=Math.round((e2p||e1p||_s20v)*(_bbLv&&_bbLv<(e2p||_s20v)?1:_slBuf)); slr='2차 진입가 기준 -1.5% 손절'; }
+  if(!t1p){ t1p=_bbUv?_bbUv:Math.round((e1p||_s20v)*1.05); t1r='볼린저 상단 또는 +5% 1차 익절 목표'; }
 
   // ── 수익률 계산 ──
   var e1sl1  = e1p&&slp ? _pct(e1p,slp)  : '';
