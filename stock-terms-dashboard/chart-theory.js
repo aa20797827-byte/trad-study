@@ -139,6 +139,7 @@ window._ctAutoAnalyze = async function(symbol){
     var name     = meta.shortName || ticker;
 
     var aData = computeAutoAnalysis(closes, opens, highs, lows, vols, curPrice);
+    aData.currency = currency;
     aData.note = name + ' | ' + ticker + ' | 일봉 6개월 자동 감지 (Yahoo Finance)';
 
     out.innerHTML = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
@@ -239,17 +240,17 @@ function computeAutoAnalysis(closes, opens, highs, lows, vols, currentPrice){
 
 // 감지된 기준값 뱃지
 function buildDetectedBadge(d, price, currency, name){
-  var priceStr = currency==='KRW' ? Math.round(price).toLocaleString()+'원' : '$'+price.toFixed(2);
+  var fp2 = function(v){ return formatPrice(v, currency); };
   var structStr = d.structure==='box'?'📦 박스 구간':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세';
   return '<div style="margin-top:12px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:14px;margin-bottom:4px">'
   +'<div style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:8px">🤖 자동 감지 결과 — '+name+'</div>'
   +'<div style="font-size:12px;color:var(--mt);line-height:1.9">'
-  +'현재가 <b style="color:var(--tx)">'+priceStr+'</b> &nbsp;|&nbsp; 감지 구조 <b style="color:var(--tx)">'+structStr+'</b><br>'
-  +'박스 <b style="color:#ef4444">'+d.boxUpper.toLocaleString()+'</b>'
-  +' / <b style="color:var(--tx)">'+d.boxClose.toLocaleString()+'</b>'
-  +' / <b style="color:#22c55e">'+d.boxLower.toLocaleString()+'</b>'
-  +(d.dojiClose>0?' &nbsp;|&nbsp; 도지 종가 <b style="color:#f59e0b">'+d.dojiClose.toLocaleString()+'</b>':'')
-  +(d.eventClose>0?' &nbsp;|&nbsp; 사건봉 종가 <b style="color:#f97316">'+d.eventClose.toLocaleString()+'</b>':'')
+  +'현재가 <b style="color:var(--tx)">'+fp2(price)+'</b> &nbsp;|&nbsp; 감지 구조 <b style="color:var(--tx)">'+structStr+'</b><br>'
+  +'박스 <b style="color:#ef4444">'+fp2(d.boxUpper)+'</b>'
+  +' / <b style="color:var(--tx)">'+fp2(d.boxClose)+'</b>'
+  +' / <b style="color:#22c55e">'+fp2(d.boxLower)+'</b>'
+  +(d.dojiClose>0?' &nbsp;|&nbsp; 도지 종가 <b style="color:#f59e0b">'+fp2(d.dojiClose)+'</b>':'')
+  +(d.eventClose>0?' &nbsp;|&nbsp; 사건봉 종가 <b style="color:#f97316">'+fp2(d.eventClose)+'</b>':'')
   +'</div>'
   +'<div style="margin-top:6px;font-size:10px;color:#4b5563">⚠ 알고리즘 추정값 — 정밀 분석은 🔍 구조론 분석 탭에서 수동 보정 후 재실행하세요.</div>'
   +'</div>';
@@ -273,6 +274,7 @@ function fillForm(d){
   set('ct-event-close',d.eventClose);
   set('ct-vol',       d.volLevel);
   set('ct-vol-context',d.volContext);
+  set('ct-currency',  d.currency||'KRW');
   set('ct-note',      d.note);
 }
 
@@ -298,6 +300,7 @@ window._ctAnalyze = function(){
     volContext:  s('ct-vol-context'),
     gap:         s('ct-gap'),
     retest:      s('ct-retest'),
+    currency:    s('ct-currency'),
     note:        s('ct-note')
   };
   var result = generateAnalysis(data);
@@ -314,6 +317,8 @@ function generateAnalysis(d){
   var bc = d.boxClose  || 0;
   var du = d.dojiUpper || 0, dl = d.dojiLower || 0, dc = d.dojiClose || 0;
   var ec = d.eventClose || 0;
+  // 통화 포맷 단축 함수
+  var fp = function(v){ return formatPrice(v, d.currency||'KRW'); };
 
   if(!p && !bu && !bl && !du && !dl){
     return '<div style="padding:16px;color:#f59e0b;font-size:13px">⚠ 현재 가격과 박스 또는 도지 경계를 입력해 주세요.</div>';
@@ -358,70 +363,70 @@ function generateAnalysis(d){
     if(p>=dl && p<=du){
       if(p<=dc){
         posStr='도지 내부 / 하단~종가 (매수 우위)'; recommendation='도지 내부 매수 전략 (박스매매)';
-        entries=['1차: '+dc.toLocaleString()+' 근처 (도지 종가)', '2차: '+dl.toLocaleString()+' 근처 (도지 하단)'];
-        stopLoss=dl.toLocaleString()+' 종가 이탈 → 즉시 손절';
-        targets=['1차: '+du.toLocaleString()+' (도지 상단)', '2차: 도지 상단 돌파 후 다음 기능선'];
-        scenarios=['시나리오 A: 도지 하단 지지 → 종가 회복 → 상단 도전','시나리오 B: '+dl.toLocaleString()+' 이탈 → 즉시 손절'];
-        supportC=['도지 종가 '+dc.toLocaleString()+'(균형)', '도지 하단 '+dl.toLocaleString()+'(매수 경계)'];
-        resistC =['도지 상단 '+du.toLocaleString()+'(매도 경계)'];
+        entries=['1차: '+fp(dc)+' 근처 (도지 종가)', '2차: '+fp(dl)+' 근처 (도지 하단)'];
+        stopLoss=fp(dl)+' 종가 이탈 → 즉시 손절';
+        targets=['1차: '+fp(du)+' (도지 상단)', '2차: 도지 상단 돌파 후 다음 기능선'];
+        scenarios=['시나리오 A: 도지 하단 지지 → 종가 회복 → 상단 도전','시나리오 B: '+fp(dl)+' 이탈 → 즉시 손절'];
+        supportC=['도지 종가 '+fp(dc)+'(균형)', '도지 하단 '+fp(dl)+'(매수 경계)'];
+        resistC =['도지 상단 '+fp(du)+'(매도 경계)'];
         finalJudge='매수 가능 (도지 내부 분할 매수)';
       } else {
         posStr='도지 내부 / 종가~상단 (매도 우위)'; recommendation='도지 내부 매도 전략 (박스매매)';
-        entries=['1차: '+du.toLocaleString()+' 근처 (도지 상단)', '2차: '+dc.toLocaleString()+' 근처 (도지 종가)'];
-        stopLoss=du.toLocaleString()+' 종가 돌파 → 즉시 손절 (상방 전환)';
-        targets=['1차: '+dc.toLocaleString()+' (도지 종가)', '2차: '+dl.toLocaleString()+' (도지 하단)'];
-        scenarios=['시나리오 A: 도지 상단 저항 → 종가 이탈 → 하단 도전','시나리오 B: '+du.toLocaleString()+' 돌파 → 즉시 손절'];
-        resistC=['도지 상단 '+du.toLocaleString()+'(매도 경계)', '도지 종가 '+dc.toLocaleString()+'(균형)'];
-        supportC=['도지 하단 '+dl.toLocaleString()+'(매수 경계)'];
+        entries=['1차: '+fp(du)+' 근처 (도지 상단)', '2차: '+fp(dc)+' 근처 (도지 종가)'];
+        stopLoss=fp(du)+' 종가 돌파 → 즉시 손절 (상방 전환)';
+        targets=['1차: '+fp(dc)+' (도지 종가)', '2차: '+fp(dl)+' (도지 하단)'];
+        scenarios=['시나리오 A: 도지 상단 저항 → 종가 이탈 → 하단 도전','시나리오 B: '+fp(du)+' 돌파 → 즉시 손절'];
+        resistC=['도지 상단 '+fp(du)+'(매도 경계)', '도지 종가 '+fp(dc)+'(균형)'];
+        supportC=['도지 하단 '+fp(dl)+'(매수 경계)'];
         finalJudge='매도 가능 (도지 내부 분할 매도)';
       }
     } else if(p>du){
       posStr='도지 상단 위 — 외부 상방 (추세매매)';
-      supportC=['도지 상단 '+du.toLocaleString()+'(저항→지지 후보)', '도지 종가 '+dc.toLocaleString()+'(2차 지지)'];
-      if(bu) resistC.push('박스 상단 '+bu.toLocaleString()+'(다음 저항)');
-      removedC=[{price:'도지 하단 '+dl.toLocaleString(), reason:'상방 돌파 시 1차 기능선에서 제외'}];
+      supportC=['도지 상단 '+fp(du)+'(저항→지지 후보)', '도지 종가 '+fp(dc)+'(2차 지지)'];
+      if(bu) resistC.push('박스 상단 '+fp(bu)+'(다음 저항)');
+      removedC=[{price:'도지 하단 '+fp(dl), reason:'상방 돌파 시 1차 기능선에서 제외'}];
       if(d.retest==='pending'){
         recommendation='상방 돌파 확인 — 눌림(리테스트) 대기 중';
-        entries=['1차 대기: '+du.toLocaleString()+' 지지 전환 확인 후', '2차 대기: '+dc.toLocaleString()+' (추가 조정 시)'];
-        stopLoss=dc.toLocaleString()+' 이탈 → 눌림 실패 / '+dl.toLocaleString()+' 이탈 → 완전 실패';
+        entries=['1차 대기: '+fp(du)+' 지지 전환 확인 후', '2차 대기: '+fp(dc)+' (추가 조정 시)'];
+        stopLoss=fp(dc)+' 이탈 → 눌림 실패 / '+fp(dl)+' 이탈 → 완전 실패';
         targets=['1차: 직전 고점','2차: 추세 가속 후 다음 저항'];
-        scenarios=['시나리오 A: 눌림 → '+du.toLocaleString()+' 지지 → 재상승','시나리오 B: '+dc.toLocaleString()+' 이탈 → 박스매매 전환'];
+        scenarios=['시나리오 A: 눌림 → '+fp(du)+' 지지 → 재상승','시나리오 B: '+fp(dc)+' 이탈 → 박스매매 전환'];
         finalJudge='대기 (리테스트 발생 대기)';
       } else if(d.retest==='done'){
         recommendation='리테스트 완료 — 도지 상단 지지 확인 후 매수';
-        entries=['1차 매수: '+du.toLocaleString()+' 지지 확인 완료', '2차 매수: '+dc.toLocaleString()+' (추가 조정 시)'];
-        stopLoss=dl.toLocaleString()+' 종가 이탈 → 완전 구조 붕괴 즉시 손절';
+        entries=['1차 매수: '+fp(du)+' 지지 확인 완료', '2차 매수: '+fp(dc)+' (추가 조정 시)'];
+        stopLoss=fp(dl)+' 종가 이탈 → 완전 구조 붕괴 즉시 손절';
         targets=['1차: 직전 고점','2차: 추세 가속'];
-        scenarios=['시나리오 A: 지지 확정 → 재상승 가속','시나리오 B: '+dc.toLocaleString()+' 이탈 → 손절'];
+        scenarios=['시나리오 A: 지지 확정 → 재상승 가속','시나리오 B: '+fp(dc)+' 이탈 → 손절'];
         finalJudge='매수 가능 (리테스트 성공)';
       } else {
         recommendation='리테스트 실패 — 구조 재평가 필요';
-        entries=['새로운 기능선 재설정 후 재분석']; stopLoss=dl.toLocaleString()+' 이탈 → 완전 붕괴';
+        entries=['새로운 기능선 재설정 후 재분석']; stopLoss=fp(dl)+' 이탈 → 완전 붕괴';
         scenarios=['시나리오 A: 현 가격 재지지 형성','시나리오 B: 하락 지속 → 하위 기능선 확인'];
         targets=[]; finalJudge='무포지션 (재평가 대기)';
       }
     } else {
       posStr='도지 하단 아래 — 외부 하방 (추세매매)';
-      resistC=['도지 하단 '+dl.toLocaleString()+'(지지→저항 후보)', '도지 종가 '+dc.toLocaleString()+'(2차 저항)'];
-      if(bl) supportC.push('박스 하단 '+bl.toLocaleString()+'(다음 지지)');
-      removedC=[{price:'도지 상단 '+du.toLocaleString(), reason:'하방 이탈 시 1차 기능선에서 제외'}];
+      resistC=['도지 하단 '+fp(dl)+'(지지→저항 후보)', '도지 종가 '+fp(dc)+'(2차 저항)'];
+      if(bl) supportC.push('박스 하단 '+fp(bl)+'(다음 지지)');
+      removedC=[{price:'도지 상단 '+fp(du), reason:'하방 이탈 시 1차 기능선에서 제외'}];
       if(d.retest==='pending'){
         recommendation='하방 이탈 확인 — 반등(리테스트) 대기 중';
-        entries=['1차 대기: '+dl.toLocaleString()+' 저항 전환 확인 후', '2차 대기: '+dc.toLocaleString()+' (추가 반등 시)'];
-        stopLoss=dc.toLocaleString()+' 돌파 → 실패 / '+du.toLocaleString()+' 돌파 → 완전 실패';
+        entries=['1차 대기: '+fp(dl)+' 저항 전환 확인 후', '2차 대기: '+fp(dc)+' (추가 반등 시)'];
+        stopLoss=fp(dc)+' 돌파 → 실패 / '+fp(du)+' 돌파 → 완전 실패';
         targets=['1차: 직전 저점','2차: 추세 하락 가속'];
-        scenarios=['시나리오 A: 반등 → '+dl.toLocaleString()+' 저항 → 재하락','시나리오 B: '+dc.toLocaleString()+' 돌파 → 박스매매 전환'];
+        scenarios=['시나리오 A: 반등 → '+fp(dl)+' 저항 → 재하락','시나리오 B: '+fp(dc)+' 돌파 → 박스매매 전환'];
         finalJudge='대기 (반등 발생 대기)';
       } else if(d.retest==='done'){
         recommendation='리테스트 완료 — 도지 하단 저항 확인 후 매도';
-        entries=['1차 매도: '+dl.toLocaleString()+' 저항 확인 완료', '2차 매도: '+dc.toLocaleString()+' (추가 반등 시)'];
-        stopLoss=du.toLocaleString()+' 종가 돌파 → 완전 구조 붕괴 즉시 손절';
+        entries=['1차 매도: '+fp(dl)+' 저항 확인 완료', '2차 매도: '+fp(dc)+' (추가 반등 시)'];
+        stopLoss=fp(du)+' 종가 돌파 → 완전 구조 붕괴 즉시 손절';
         targets=['1차: 직전 저점','2차: 추세 하락 가속'];
-        scenarios=['시나리오 A: 저항 확정 → 재하락 가속','시나리오 B: '+dc.toLocaleString()+' 돌파 → 손절'];
+        scenarios=['시나리오 A: 저항 확정 → 재하락 가속','시나리오 B: '+fp(dc)+' 돌파 → 손절'];
         finalJudge='매도 가능 (리테스트 성공)';
       } else {
         recommendation='리테스트 실패 — 구조 재평가 필요';
-        entries=['새로운 기능선 재설정 후 재분석']; stopLoss=du.toLocaleString()+' 돌파 → 완전 붕괴';
+        entries=['새로운 기능선 재설정 후 재분석']; stopLoss=fp(du)+' 돌파 → 완전 붕괴';
         scenarios=['시나리오 A: 현 가격 재저항 형성','시나리오 B: 반등 지속 → 상위 기능선 확인'];
         targets=[]; finalJudge='무포지션 (재평가 대기)';
       }
@@ -431,40 +436,40 @@ function generateAnalysis(d){
   } else if(hasBox){
     if(p>=bl && p<=bc){
       posStr='박스 하단~종가 (매수 우위)'; recommendation='박스 하단 매수 전략 (박스매매)';
-      entries=['1차: '+bc.toLocaleString()+' 근처 (박스 종가)', '2차: '+bl.toLocaleString()+' 근처 (박스 하단)'];
-      stopLoss=bl.toLocaleString()+' 종가 이탈 → 즉시 손절';
-      targets=['1차: '+bu.toLocaleString()+' (박스 상단)', '2차: 상단 돌파 후 다음 기능선'];
-      scenarios=['시나리오 A: 박스 하단 지지 → 종가 회복 → 상단 도전','시나리오 B: '+bl.toLocaleString()+' 이탈 → 즉시 손절'];
-      supportC=['박스 종가 '+bc.toLocaleString()+'(균형)', '박스 하단 '+bl.toLocaleString()+'(지지)'];
-      resistC=['박스 상단 '+bu.toLocaleString()+'(저항)'];
+      entries=['1차: '+fp(bc)+' 근처 (박스 종가)', '2차: '+fp(bl)+' 근처 (박스 하단)'];
+      stopLoss=fp(bl)+' 종가 이탈 → 즉시 손절';
+      targets=['1차: '+fp(bu)+' (박스 상단)', '2차: 상단 돌파 후 다음 기능선'];
+      scenarios=['시나리오 A: 박스 하단 지지 → 종가 회복 → 상단 도전','시나리오 B: '+fp(bl)+' 이탈 → 즉시 손절'];
+      supportC=['박스 종가 '+fp(bc)+'(균형)', '박스 하단 '+fp(bl)+'(지지)'];
+      resistC=['박스 상단 '+fp(bu)+'(저항)'];
       removedC=[{price:'박스 내 단순 스윙 저점', reason:'거래량 없는 단기 흔적'}];
       finalJudge='매수 가능 (박스 하단 분할 매수)';
     } else if(p>bc && p<=bu){
       posStr='박스 종가~상단 (매도 우위)'; recommendation='박스 상단 매도 전략 (박스매매)';
-      entries=['1차: '+bu.toLocaleString()+' 근처 (박스 상단)', '2차: '+bc.toLocaleString()+' 근처 (박스 종가)'];
-      stopLoss=bu.toLocaleString()+' 종가 돌파 → 즉시 손절 (지지 전환)';
-      targets=['1차: '+bc.toLocaleString()+' (박스 종가)', '2차: '+bl.toLocaleString()+' (박스 하단)'];
-      scenarios=['시나리오 A: 박스 상단 저항 → 종가 이탈 → 하단 도전','시나리오 B: '+bu.toLocaleString()+' 돌파 → 즉시 손절'];
-      resistC=['박스 상단 '+bu.toLocaleString()+'(저항)', '박스 종가 '+bc.toLocaleString()+'(균형)'];
-      supportC=['박스 하단 '+bl.toLocaleString()+'(지지)'];
+      entries=['1차: '+fp(bu)+' 근처 (박스 상단)', '2차: '+fp(bc)+' 근처 (박스 종가)'];
+      stopLoss=fp(bu)+' 종가 돌파 → 즉시 손절 (지지 전환)';
+      targets=['1차: '+fp(bc)+' (박스 종가)', '2차: '+fp(bl)+' (박스 하단)'];
+      scenarios=['시나리오 A: 박스 상단 저항 → 종가 이탈 → 하단 도전','시나리오 B: '+fp(bu)+' 돌파 → 즉시 손절'];
+      resistC=['박스 상단 '+fp(bu)+'(저항)', '박스 종가 '+fp(bc)+'(균형)'];
+      supportC=['박스 하단 '+fp(bl)+'(지지)'];
       removedC=[{price:'박스 내 단순 스윙 고점', reason:'거래량 없는 단기 흔적'}];
       finalJudge='매도 가능 (박스 상단 분할 매도)';
     } else if(p>bu){
       posStr='박스 상단 위 (상방 이탈 — 눌림매매)'; recommendation='눌림매매 대기 — 박스 상단 지지 전환 확인';
-      entries=['1차 대기: '+bu.toLocaleString()+' 지지 전환 확인', '2차 대기: '+bc.toLocaleString()+' (박스 종가)'];
-      stopLoss=bc.toLocaleString()+' 종가 이탈 → 눌림 실패 손절';
+      entries=['1차 대기: '+fp(bu)+' 지지 전환 확인', '2차 대기: '+fp(bc)+' (박스 종가)'];
+      stopLoss=fp(bc)+' 종가 이탈 → 눌림 실패 손절';
       targets=['1차: 이전 고점 또는 다음 저항', '2차: 추세 가속'];
-      scenarios=['시나리오 A: 눌림 → '+bu.toLocaleString()+' 지지 → 재상승','시나리오 B: '+bc.toLocaleString()+' 이탈 → 박스매매 전환'];
-      supportC=['박스 상단 '+bu.toLocaleString()+'(저항→지지 후보)', '박스 종가 '+bc.toLocaleString()+'(2차 지지)'];
+      scenarios=['시나리오 A: 눌림 → '+fp(bu)+' 지지 → 재상승','시나리오 B: '+fp(bc)+' 이탈 → 박스매매 전환'];
+      supportC=['박스 상단 '+fp(bu)+'(저항→지지 후보)', '박스 종가 '+fp(bc)+'(2차 지지)'];
       removedC=[{price:'최근 단순 스윙 고점', reason:'거래량/체류시간 근거 없는 단기 고점'}];
       finalJudge='대기 → 눌림목 확인 후 매수';
     } else {
       posStr='박스 하단 아래 (하방 이탈 — 되돌림 매도)'; recommendation='되돌림 매도 대기 — 박스 하단 저항 전환 확인';
-      entries=['1차 대기: '+bl.toLocaleString()+' 저항 전환 확인', '2차 대기: '+bc.toLocaleString()+' (박스 종가)'];
-      stopLoss=bc.toLocaleString()+' 종가 돌파 → 되돌림 실패 손절';
+      entries=['1차 대기: '+fp(bl)+' 저항 전환 확인', '2차 대기: '+fp(bc)+' (박스 종가)'];
+      stopLoss=fp(bc)+' 종가 돌파 → 되돌림 실패 손절';
       targets=['1차: 이전 저점 또는 다음 지지', '2차: 추세 하락 가속'];
-      scenarios=['시나리오 A: 반등 → '+bl.toLocaleString()+' 저항 → 재하락','시나리오 B: '+bc.toLocaleString()+' 돌파 → 박스매매 전환'];
-      resistC=['박스 하단 '+bl.toLocaleString()+'(지지→저항 후보)', '박스 종가 '+bc.toLocaleString()+'(2차 저항)'];
+      scenarios=['시나리오 A: 반등 → '+fp(bl)+' 저항 → 재하락','시나리오 B: '+fp(bc)+' 돌파 → 박스매매 전환'];
+      resistC=['박스 하단 '+fp(bl)+'(지지→저항 후보)', '박스 종가 '+fp(bc)+'(2차 저항)'];
       removedC=[{price:'최근 단순 스윙 저점', reason:'거래량/체류시간 근거 없는 단기 저점'}];
       finalJudge='대기 → 되돌림 확인 후 매도';
     }
@@ -474,19 +479,19 @@ function generateAnalysis(d){
   }
 
   // 사건봉 추가
-  if(ec){ (p>=ec ? supportC : resistC).push('사건봉 종가 '+ec.toLocaleString()+'(대량거래 합의)'); }
+  if(ec){ (p>=ec ? supportC : resistC).push('사건봉 종가 '+fp(ec)+'(대량거래 합의)'); }
 
   var dojiTypeText = d.dojiType==='strength'?'추세강화도지 — 추세 중간 에너지 재충전. 재방문 시 강한 지지/저항':
                     d.dojiType==='reversal'?'추세반전도지 — 추세 전환 기준점. 재침범 시 새 추세 훼손 신호':'';
 
   var fLines=[];
-  if(du) fLines.push('도지 상단: '+du.toLocaleString());
-  if(dc) fLines.push('도지 종가: '+dc.toLocaleString()+' ← 압축된 합의가격');
-  if(dl) fLines.push('도지 하단: '+dl.toLocaleString());
-  if(bu) fLines.push('박스 상단: '+bu.toLocaleString());
-  if(bc&&hasBox) fLines.push('박스 종가 클러스터: '+bc.toLocaleString());
-  if(bl) fLines.push('박스 하단: '+bl.toLocaleString());
-  if(ec) fLines.push('사건봉 종가: '+ec.toLocaleString()+' ← 대량거래 후 합의');
+  if(du) fLines.push('도지 상단: '+fp(du));
+  if(dc) fLines.push('도지 종가: '+fp(dc)+' ← 압축된 합의가격');
+  if(dl) fLines.push('도지 하단: '+fp(dl));
+  if(bu) fLines.push('박스 상단: '+fp(bu));
+  if(bc&&hasBox) fLines.push('박스 종가 클러스터: '+fp(bc));
+  if(bl) fLines.push('박스 하단: '+fp(bl));
+  if(ec) fLines.push('사건봉 종가: '+fp(ec)+' ← 대량거래 후 합의');
 
   var color  = finalJudge.includes('매수')?'#22c55e':finalJudge.includes('매도')?'#ef4444':'#f59e0b';
   var bgC    = finalJudge.includes('매수')?'rgba(34,197,94,.12)':finalJudge.includes('매도')?'rgba(239,68,68,.12)':'rgba(245,158,11,.12)';
@@ -496,7 +501,7 @@ function generateAnalysis(d){
   +'<div style="font-size:15px;font-weight:800;margin-bottom:14px;color:var(--tx)">📊 차트술사 구조론 분석 결과</div>'
   +row('1. 현재 구조', structLabel)
   +row('2. 분석 관점', recommendation)
-  +row('3. 가격 위치', (p?p.toLocaleString()+'원':'미입력')+' — '+posStr)
+  +row('3. 가격 위치', (p?fp(p):'미입력')+' — '+posStr)
   +section('4. 핵심 기능선', fLines.length?fLines.map(function(l){return '• '+l;}).join('<br>'):'미입력')
   +(dojiTypeText?row('4-1. 도지 타입', dojiTypeText):'')
   +section('5. 핵심 지지 후보', supportC.length?supportC.map(function(s,i){return '• '+(i===0?'1차: ':i===1?'2차: ':'보조: ')+s;}).join('<br>'):'해당 없음')
@@ -513,6 +518,18 @@ function generateAnalysis(d){
   +'🏁 최종 판단: '+finalJudge+'</div>'
   +'<div style="margin-top:8px;font-size:10px;color:#4b5563">⚠ 차트술사 구조론 규칙 기반 시나리오입니다. 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
   +'</div>';
+}
+
+// ── 통화 포맷 ──
+function formatPrice(v, cur){
+  if(!v || v===0) return '0';
+  var c = cur || 'KRW';
+  if(c==='USD') return '$'+(v<10 ? v.toFixed(4) : v<1000 ? v.toFixed(2) : v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}));
+  if(c==='EUR') return '€'+v.toFixed(2);
+  if(c==='GBP') return '£'+v.toFixed(2);
+  if(c==='JPY') return '¥'+Math.round(v).toLocaleString();
+  if(c==='CNY') return '¥'+v.toFixed(2);
+  return Math.round(v).toLocaleString()+'원'; // KRW default
 }
 
 function row(label, value){
@@ -606,6 +623,14 @@ function buildAnalyzePane(){
   +'<div class="ct-form-row"><div class="ct-label">현재 구조 *</div><select id="ct-structure" class="ct-input">'
   +'<option value="box">📦 박스 구간</option><option value="trend-up">📈 상승 추세</option><option value="trend-down">📉 하락 추세</option>'
   +'</select></div>'
+  +'<div class="ct-form-row"><div class="ct-label">통화</div><select id="ct-currency" class="ct-input">'
+  +'<option value="KRW" selected>🇰🇷 원화 (KRW)</option>'
+  +'<option value="USD">🇺🇸 달러 (USD)</option>'
+  +'<option value="JPY">🇯🇵 엔화 (JPY)</option>'
+  +'<option value="EUR">🇪🇺 유로 (EUR)</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div class="ct-g2">'
   +'<div class="ct-form-row"><div class="ct-label">기능선 格 (프레임)</div><select id="ct-frame" class="ct-input">'
   +'<option value="daily" selected>B급 — 일봉</option><option value="weekly">A급 — 주봉</option>'
   +'<option value="monthly">S급 — 월봉</option><option value="h4">C급 — 4시간</option><option value="h1">C급 — 1시간</option>'
