@@ -22,12 +22,120 @@ window.showChart = function(){
   }, 600);
 };
 
+// ══════════════════════════════════════
+// ── 분석 저장 시스템 (localStorage) ──
+// ══════════════════════════════════════
+
+// 분석 저장
+window._ctSaveAnalysis = function(){
+  var sym = (document.getElementById('ct-sym-input')||{}).value || '—';
+  var e1 = parseFloat((document.getElementById('ct-c-price')||document.getElementById('ct-price')||{}).value)||0;
+  var upper = parseFloat((document.getElementById('ct-c-upper')||document.getElementById('ct-box-upper')||{}).value)||0;
+  var lower = parseFloat((document.getElementById('ct-c-lower')||document.getElementById('ct-box-lower')||{}).value)||0;
+  var struct = (document.getElementById('ct-c-struct')||document.getElementById('ct-structure')||{}).value||'box';
+
+  // 마지막 분석 결과에서 가격 추출
+  var out = document.getElementById('ct-auto-output');
+  var e1pEl = out ? out.querySelector('[data-e1p]') : null;
+
+  var rec = {
+    id: Date.now(),
+    date: new Date().toLocaleDateString('ko-KR',{month:'2-digit',day:'2-digit'}),
+    time: new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'}),
+    sym: sym.replace(/^KRX:/,''),
+    price: e1,
+    upper: upper, lower: lower,
+    struct: struct==='trend-up'?'상승':struct==='trend-down'?'하락':'박스',
+    result: '', memo: ''
+  };
+
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
+  hist.unshift(rec);
+  hist = hist.slice(0,100);
+  localStorage.setItem('ct_hist', JSON.stringify(hist));
+
+  // 버튼 피드백
+  var btn = document.getElementById('ct-save-btn');
+  if(btn){ btn.textContent='✅ 저장됨'; setTimeout(function(){btn.textContent='💾 분석 저장';},2000); }
+};
+
+// 분석 결과 업데이트 (result 필드)
+window._ctUpdateResult = function(id, result){
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
+  var rec = hist.find(function(h){return h.id===id;});
+  if(rec){ rec.result=result; localStorage.setItem('ct_hist',JSON.stringify(hist)); renderHistory(); }
+};
+
+// 기록 삭제
+window._ctDeleteHistory = function(id){
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]').filter(function(h){return h.id!==id;});
+  localStorage.setItem('ct_hist', JSON.stringify(hist));
+  renderHistory();
+};
+
+// 기록 렌더링
+function renderHistory(){
+  var el = document.getElementById('ct-hist-body');
+  if(!el) return;
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
+  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; return; }
+  el.innerHTML = hist.map(function(h){
+    var rC = h.result==='성공'?'#22c55e':h.result==='실패'?'#ef4444':'#6b7280';
+    return '<tr>'
+      +'<td>'+h.date+' '+h.time+'</td>'
+      +'<td><b>'+h.sym+'</b></td>'
+      +'<td>'+(h.price?h.price.toLocaleString():'—')+'</td>'
+      +'<td style="font-size:11px;color:#9ca3af">'+(h.lower?h.lower.toLocaleString():'—')+' ~ '+(h.upper?h.upper.toLocaleString():'—')+'</td>'
+      +'<td><span style="font-size:11px;padding:2px 6px;background:var(--s2);border-radius:4px">'+h.struct+'</span></td>'
+      +'<td><select onchange="window._ctUpdateResult('+h.id+',this.value)" style="background:transparent;border:1px solid var(--bd);border-radius:4px;color:'+rC+';font-size:11px;padding:2px 4px">'
+        +'<option value="" '+(h.result===''?'selected':'')+'>미확인</option>'
+        +'<option value="성공" '+(h.result==='성공'?'selected':'')+'>✅ 성공</option>'
+        +'<option value="실패" '+(h.result==='실패'?'selected':'')+'>❌ 실패</option>'
+        +'<option value="보유중" '+(h.result==='보유중'?'selected':'')+'>📊 보유중</option>'
+      +'</select></td>'
+      +'<td><button onclick="window._ctDeleteHistory('+h.id+')" style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:12px">🗑</button></td>'
+    +'</tr>';
+  }).join('');
+}
+
+// ── 매매 계산기 ──
+window._ctCalcPosition = function(){
+  var account = parseFloat((document.getElementById('ct-account')||{}).value)||0;
+  var pct = parseFloat((document.getElementById('ct-pos-pct')||{}).value)||100;
+  var entry = parseFloat((document.getElementById('ct-calc-entry')||{}).value)||0;
+  var stop = parseFloat((document.getElementById('ct-calc-stop')||{}).value)||0;
+  var target = parseFloat((document.getElementById('ct-calc-target')||{}).value)||0;
+  var cur = (document.getElementById('ct-c-currency')||document.getElementById('ct-currency')||{}).value||'KRW';
+  var res = document.getElementById('ct-calc-result');
+  if(!res) return;
+
+  if(!account||!entry){ res.innerHTML='<span style="color:#6b7280">계좌 크기와 진입가를 입력하세요</span>'; return; }
+
+  var investAmt = Math.round(account * pct / 100);
+  var shares = entry>0 ? Math.floor(investAmt/entry) : 0;
+  var actualInvest = shares * entry;
+  var riskAmt = stop>0&&shares>0 ? Math.round(shares * Math.abs(entry-stop)) : 0;
+  var profitAmt = target>0&&shares>0 ? Math.round(shares * Math.abs(target-entry)) : 0;
+  var riskPct = account>0 ? Math.round(riskAmt/account*100*10)/10 : 0;
+  var fp2 = function(v){ return cur==='USD'?'$'+(v/1).toLocaleString('en-US',{minimumFractionDigits:0}):v.toLocaleString()+'원'; };
+
+  res.innerHTML =
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="padding:10px;background:var(--s2);border-radius:8px"><div style="font-size:10px;color:#6b7280">투자금액</div><div style="font-size:16px;font-weight:800;color:var(--tx)">'+fp2(actualInvest)+'</div><div style="font-size:10px;color:#6b7280">계좌의 '+pct+'%</div></div>'
+    +'<div style="padding:10px;background:var(--s2);border-radius:8px"><div style="font-size:10px;color:#6b7280">매수 수량</div><div style="font-size:16px;font-weight:800;color:var(--tx)">'+shares.toLocaleString()+'주</div><div style="font-size:10px;color:#6b7280">@ '+fp2(entry)+'</div></div>'
+    +(stop?'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)"><div style="font-size:10px;color:#ef4444">최대 손실</div><div style="font-size:16px;font-weight:800;color:#ef4444">'+fp2(riskAmt)+'</div><div style="font-size:10px;color:#6b7280">계좌의 '+riskPct+'%</div></div>':'')
+    +(target&&stop?'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)"><div style="font-size:10px;color:#22c55e">예상 수익</div><div style="font-size:16px;font-weight:800;color:#22c55e">'+fp2(profitAmt)+'</div><div style="font-size:10px;color:#6b7280">R:R 1:'+Math.round(profitAmt/(riskAmt||1)*10)/10+'</div></div>':'')
+    +'</div>'
+    +(riskPct>5?'<div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;font-size:11px;color:#ef4444">⚠ 최대 손실이 계좌의 '+riskPct+'%입니다. 통상 1~2% 이하 권장.</div>':'');
+};
+
 // ── 탭 전환 ──
 window._ctSwitchTab = function(id){
   _ctTab = id;
   document.querySelectorAll('.ct-tab').forEach(function(b){ b.classList.toggle('on', b.dataset.t===id); });
   document.querySelectorAll('.ct-pane').forEach(function(c){ c.style.display = c.dataset.pane===id ? 'block' : 'none'; });
   if(id==='chart' && !_tvLoaded){ setTimeout(initTV, 250); _tvLoaded=true; }
+  if(id==='history'){ setTimeout(renderHistory, 50); }
 };
 
 // ── TradingView 초기화 ──
@@ -2412,7 +2520,10 @@ function generateAnalysis(d){
   +(d.note?'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:50px;display:inline-block">참고</span>'+d.note+'</div>':'')
   +'</div></div>'
 
-  +'<div style="margin-top:10px;font-size:12px;color:#4b5563;text-align:center">⚠ 구조론 기반 시나리오 — 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">'
+  +'<div style="font-size:12px;color:#4b5563">⚠ 구조론 기반 시나리오 — 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
+  +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:8px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">💾 분석 저장</button>'
+  +'</div>'
   +'</div>'
   + buildTechSection(d.indicators, p, fp);
 }
@@ -2526,6 +2637,17 @@ function buildCSS(){
   +'.ct-sym-bar{display:flex;gap:8px;margin-bottom:12px}'
   +'.ct-sym-in{flex:1;padding:9px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--tx);font-size:13px}'
   +'.ct-sym-btn{padding:9px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600}'
+  // 2열 레이아웃 (PC)
+  +'.ct-two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}'
+  +'.ct-col-left{min-width:0}.ct-col-right{min-width:0}'
+  // 히스토리 테이블
+  +'.ct-hist-table{width:100%;border-collapse:collapse}'
+  +'.ct-hist-table th,.ct-hist-table td{padding:8px 10px;text-align:left;border-bottom:1px solid var(--bd);font-size:12px}'
+  +'.ct-hist-table th{font-weight:700;color:#6b7280;background:var(--s1)}'
+  +'.ct-hist-table td{color:var(--tx)}'
+  +'.ct-hist-table tr:hover td{background:var(--s2)}'
+  // 반응형
+  +'@media(max-width:900px){.ct-two-col{grid-template-columns:1fr}}'
   +'@media(max-width:640px){.ct-g2{grid-template-columns:1fr}.ct-g3{grid-template-columns:1fr 1fr}}'
   +'</style>';
 }
@@ -2538,13 +2660,18 @@ function buildHero(){
 }
 
 function buildTabBar(){
-  var tabs=[{id:'chart',label:'📈 차트 분석'},{id:'analyze',label:'🔬 상세 입력'},{id:'theory',label:'📚 이론 가이드'}];
+  var tabs=[
+    {id:'chart',label:'📈 차트 분석'},
+    {id:'analyze',label:'🔬 상세 입력'},
+    {id:'history',label:'📋 분석 기록'},
+    {id:'theory',label:'📚 이론 가이드'}
+  ];
   return '<div class="ct-tab-bar">'
   +tabs.map(function(t){ return '<button class="ct-tab" data-t="'+t.id+'" onclick="window._ctSwitchTab(\''+t.id+'\')">'+t.label+'</button>'; }).join('')
   +'</div>';
 }
 
-function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildTheoryPane(); }
+function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildHistoryPane()+buildTheoryPane(); }
 
 // ── 차트 탭 ──
 function buildChartPane(){
@@ -2560,11 +2687,27 @@ function buildChartPane(){
   +'<button class="ct-sym-btn" onclick="window._ctChangeSymbol()">분석</button>'
   +'</div>'
 
-  // TradingView 차트
-  +'<div id="ct-tv-box" style="height:480px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px"></div>'
+  // PC: 2열 레이아웃 (차트 왼쪽 | 분석 오른쪽)
+  +'<div class="ct-two-col">'
 
-  // 자동 분석 결과 영역
+  // 왼쪽: 차트
+  +'<div class="ct-col-left">'
+  +'<div id="ct-tv-box" style="height:480px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:8px"></div>'
+  // 멀티 타임프레임 안내
+  +'<div style="padding:10px 12px;background:var(--s2);border-radius:10px;border:1px solid var(--bd);font-size:11px;color:#6b7280">'
+  +'💡 <b style="color:var(--tx)">멀티 타임프레임 분석 방법</b><br>'
+  +'① 월봉(M) 선택 → 박스 경계 확인 (S급 기능선)<br>'
+  +'② 주봉(W) 선택 → 추세 방향 확인 (A급 기능선)<br>'
+  +'③ 일봉(D) 선택 → 진입 타점 확인 (B급 기능선)'
+  +'</div>'
+  +'</div>'
+
+  // 오른쪽: 분석 결과
+  +'<div class="ct-col-right">'
   +'<div id="ct-auto-output"></div>'
+  +'</div>'
+
+  +'</div>' // ct-two-col 닫기
 
   +'</div>';
 }
@@ -2633,6 +2776,49 @@ function buildAnalyzePane(){
   +'<textarea id="ct-note" class="ct-input" rows="2" placeholder="뉴스, 특이사항 등"></textarea></div>'
   +'<button class="ct-btn" onclick="window._ctAnalyze()">📊 차트 분석 실행</button>'
   +'<div id="ct-output"></div>'
+  +'</div>';
+}
+
+// ── 분석 기록 탭 ──
+function buildHistoryPane(){
+  return '<div class="ct-pane" data-pane="history" style="display:none;padding:16px">'
+
+  // 매매 계산기
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:14px">⚖️ 매매 계산기</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💰 계좌 크기</div>'
+  +'<input id="ct-account" class="ct-input" type="number" placeholder="예: 5000000" oninput="window._ctCalcPosition()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">📊 포지션 비중 (%)</div>'
+  +'<input id="ct-pos-pct" class="ct-input" type="number" value="75" min="1" max="100" oninput="window._ctCalcPosition()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">🌐 통화</div>'
+  +'<select id="ct-calc-cur" class="ct-input" onchange="window._ctCalcPosition()">'
+  +'<option value="KRW">🇰🇷 원화</option><option value="USD">🇺🇸 달러</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px">'
+  +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">🟢 진입가</div>'
+  +'<input id="ct-calc-entry" class="ct-input" type="number" placeholder="매수가" oninput="window._ctCalcPosition()"></div>'
+  +'<div><div style="font-size:11px;color:#ef4444;margin-bottom:4px">⛔ 손절가</div>'
+  +'<input id="ct-calc-stop" class="ct-input" type="number" placeholder="손절가" oninput="window._ctCalcPosition()"></div>'
+  +'<div><div style="font-size:11px;color:#60a5fa;margin-bottom:4px">🎯 1차 익절가</div>'
+  +'<input id="ct-calc-target" class="ct-input" type="number" placeholder="익절가" oninput="window._ctCalcPosition()"></div>'
+  +'</div>'
+  +'<div id="ct-calc-result" style="font-size:13px;color:#6b7280">계좌 크기와 진입가를 입력하면 자동 계산됩니다.</div>'
+  +'</div>'
+
+  // 분석 기록
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx)">📋 분석 기록</div>'
+  +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:8px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">💾 현재 분석 저장</button>'
+  +'</div>'
+  +'<div style="overflow-x:auto">'
+  +'<table class="ct-hist-table"><thead><tr>'
+  +'<th>날짜·시간</th><th>종목</th><th>진입가</th><th>지지~저항</th><th>구조</th><th>결과</th><th></th>'
+  +'</tr></thead>'
+  +'<tbody id="ct-hist-body"><tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">불러오는 중...</td></tr></tbody>'
+  +'</table>'
+  +'</div>'
   +'</div>';
 }
 
