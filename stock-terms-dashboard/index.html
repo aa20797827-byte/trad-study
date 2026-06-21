@@ -1220,13 +1220,19 @@ function init(){
 // ── FILTER ──
 function filt(){
   const q=document.getElementById('search').value.toLowerCase().trim();
+  const qn=q.replace(/\s+/g,''); // 공백 제거 버전 (띄어쓰기 무관 검색)
+  function match(s){
+    if(!s)return false;
+    const sl=s.toLowerCase();
+    return sl.includes(q)||(qn&&sl.replace(/\s+/g,'').includes(qn));
+  }
   let res=TERMS.filter(t=>{
     const cm=curC==='all'||t.cat===curC;
     const lm=curLv===0||t.lv===curLv;
     const fm=!showFavOnly||favSet.has(t.ko);
     const um=!showUnlearnedOnly||!learned.has(t.ko);
     if(!q)return cm&&lm&&fm&&um;
-    return cm&&lm&&fm&&um&&(t.ko.toLowerCase().includes(q)||t.en.toLowerCase().includes(q)||t.sum.toLowerCase().includes(q)||(t.desc&&t.desc.toLowerCase().includes(q)));
+    return cm&&lm&&fm&&um&&(match(t.ko)||match(t.en)||match(t.sum)||match(t.desc||''));
   });
   if(curSort==='alpha')res.sort((a,b)=>a.ko.localeCompare(b.ko,'ko'));
   else if(curSort==='lv-asc')res.sort((a,b)=>a.lv-b.lv);
