@@ -2037,108 +2037,9 @@ function generateAnalysis(d){
     return {posSize:posSize, sizeColor:sizeColor, signals:signals, condEntry:condEntry};
   })();
 
-  // ── 종합 판단 (구조론 + 모든 보조지표 통합) ──
-  var comprehensiveJudge = (function(){
-    var ind = d.indicators;
-    if(!ind) return {judge: finalJudge, score:50, agrees:[], disagrees:[], action:''};
-
-    var rsi=ind.rsi, mac=ind.macd, bb=ind.bb, s2=ind.sma||{}, vol=ind.vol||{};
-    var cdl=ind.candle, patterns=ind.patterns||[];
-    var rsiDiv=ind.rsiDiv, macdCross=ind.macdCross, obvTrend=ind.obvTrend;
-    var score=0, total=0, agrees=[], disagrees=[];
-
-    // 구조론 기본 신호
-    var structOk = finalJudge.includes('매수') || finalJudge.includes('눌림');
-    agrees.push({t:'구조론: '+(bl?'박스 하단 '+fp(bl)+' 지지':dc?'도지 종가 '+fp(dc)+' 지지':'SMA 지지선 근처'), ok:true});
-    score+=1; total+=1;
-
-    // RSI
-    if(rsi!==null&&rsi!==undefined){
-      total++;
-      if(rsi<35){score++;agrees.push({t:'RSI '+rsi+' 과매도 — 반등 확률 높음',ok:true});}
-      else if(rsi<50){score+=0.7;agrees.push({t:'RSI '+rsi+' 저권역 — 매수 우위',ok:true});}
-      else if(rsi<65){score+=0.4;}
-      else{disagrees.push({t:'RSI '+rsi+' 과매수 — 단기 조정 주의',ok:false});}
-    }
-    // RSI 다이버전스
-    if(rsiDiv==='bullish'){total++;score++;agrees.push({t:'RSI 강세 다이버전스 — 상승 반전 선행 신호',ok:true});}
-    if(rsiDiv==='bearish'){total++;disagrees.push({t:'RSI 약세 다이버전스 — 하락 주의',ok:false});}
-
-    // MACD
-    if(mac){
-      total++;
-      if(macdCross==='golden'){score++;agrees.push({t:'MACD 골든크로스 — 매수 전환 신호',ok:true});}
-      else if(mac.hist>0&&mac.line>0){score++;agrees.push({t:'MACD 양권 + 히스토그램 플러스 — 매수 모멘텀',ok:true});}
-      else if(mac.hist<0&&mac.hist>mac.signal*0.5){score+=0.6;agrees.push({t:'MACD 히스토그램 개선 중 — 반전 준비',ok:true});}
-      else{disagrees.push({t:'MACD 음권 — 하락 모멘텀 지속',ok:false});}
-    }
-
-    // MA 배열
-    if(s2.s20&&s2.s60){
-      total++;
-      if(s2.s20>s2.s60){score++;agrees.push({t:'MA 정배열 (골든크로스) — 중기 상승 추세',ok:true});}
-      else{disagrees.push({t:'MA 역배열 (데드크로스) — 중기 하락 추세',ok:false});}
-    }
-
-    // 볼린저밴드
-    if(bb&&p>0){
-      total++;
-      if(p<=bb.lower*1.03){score++;agrees.push({t:'볼린저 하단 근처 — 과매도 구간',ok:true});}
-      else if(p>=bb.upper*0.97){disagrees.push({t:'볼린저 상단 근처 — 과매수 위험',ok:false});}
-      else{score+=0.5;}
-    }
-
-    // 거래량
-    if(vol.cur&&vol.avg){
-      var vr=vol.cur/vol.avg;
-      total++;
-      if(vr<0.65){score++;agrees.push({t:'거래량 감소 — 눌림 중 매도 압력 약화',ok:true});}
-      else if(vr>2){score+=0.3;}
-      else{score+=0.5;}
-    }
-    if(obvTrend==='up'){total++;score++;agrees.push({t:'OBV 상승 — 자금 유입 확인',ok:true});}
-    if(obvTrend==='down'){total++;disagrees.push({t:'OBV 하락 — 자금 이탈 중',ok:false});}
-
-    // 캔들 패턴
-    if(cdl&&cdl.sentiment==='bullish'){total++;score++;agrees.push({t:'캔들: '+cdl.name+' — 매수 반응 신호',ok:true});}
-    if(cdl&&cdl.sentiment==='bearish'){total++;disagrees.push({t:'캔들: '+cdl.name+' — 매도 압력',ok:false});}
-
-    // 차트 패턴
-    patterns.forEach(function(pt){
-      total++;
-      if(pt.type==='bullish'){score++;agrees.push({t:'차트패턴: '+pt.name,ok:true});}
-      else if(pt.type==='bearish'){disagrees.push({t:'차트패턴 경고: '+pt.name,ok:false});}
-      else{score+=0.5;}
-    });
-
-    var pct = total>0?Math.round(score/total*100):50;
-    var judge, action, jColor;
-
-    if(pct>=75){
-      judge='✅ 매수 적극 권장 — 지표 '+pct+'% 일치';
-      action='즉시 1차 진입 가능. 2차는 '+fp(e2p||0)+' 추가 조정 시.';
-      jColor='#22c55e';
-    } else if(pct>=55){
-      judge='🟡 매수 가능 — 지표 '+pct+'% 확인';
-      action='1차 진입 후 지표 추가 확인. 2차는 분할 신중 접근.';
-      jColor='#22c55e';
-    } else if(pct>=40){
-      judge='⚠ 신중 매수 — 지표 일치 '+pct+'%, 혼조';
-      action='RSI·MACD 추가 개선 확인 후 진입. 현재는 소량(30~50%)만.';
-      jColor='#f59e0b';
-    } else {
-      judge='⏳ 대기 권장 — 지표 '+pct+'% 미일치';
-      action='보조지표가 역방향. 지표 전환 확인 후 진입. 현재 진입 비권장.';
-      jColor='#ef4444';
-    }
-
-    return {judge:judge, score:pct, agrees:agrees, disagrees:disagrees, action:action, jColor:jColor};
-  })();
-
-  // 종합 판단으로 finalJudge 교체
-  var overrideFinalJudge = comprehensiveJudge.judge;
-  var color  = comprehensiveJudge.jColor||'#f59e0b';
-  var bgC    = color==='#22c55e'?'rgba(34,197,94,.15)':color==='#ef4444'?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)';
+  // ── 출력 빌더 ──
+  var color  = finalJudge.includes('매수')?'#22c55e':finalJudge.includes('매도')?'#ef4444':'#f59e0b';
+  var bgC    = finalJudge.includes('매수')?'rgba(34,197,94,.15)':finalJudge.includes('매도')?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)';
   var structLabel = (d.structure==='box'?'📦 박스':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세')+' | '+grade;
   var dojiTypeText = d.dojiType==='strength'?'추세강화도지':d.dojiType==='reversal'?'추세반전도지':'';
   var fLines=[];
@@ -2220,38 +2121,13 @@ function generateAnalysis(d){
 
   return '<div style="background:var(--s2);border-radius:16px;border:1px solid var(--bd);padding:20px;margin-top:4px">'
 
-  // ── 종합 판단 배너 (구조론 + 모든 지표 통합) ──
-  +(function(){
-    var cj=comprehensiveJudge;
-    var h='<div style="border-radius:14px;overflow:hidden;border:2px solid '+color+';margin-bottom:16px">';
-    // 상단: 최종 판단
-    h+='<div style="padding:14px 18px;background:'+bgC+';display:flex;align-items:center;gap:12px">';
-    h+='<div style="font-size:26px;flex-shrink:0">🏁</div>';
-    h+='<div style="flex:1">';
-    h+='<div style="font-size:20px;font-weight:900;color:'+color+'">'+cj.judge+'</div>';
-    h+='<div style="font-size:12px;color:var(--mt);margin-top:4px">'+structLabel+' | 현재가 '+(p?'<b style="color:var(--tx)">'+fp(p)+'</b>':'미입력')+' — '+posStr+'</div>';
-    h+='</div>';
-    h+='<div style="text-align:right;flex-shrink:0"><div style="font-size:11px;color:#6b7280">신호 일치</div><div style="font-size:24px;font-weight:900;color:'+color+'">'+cj.score+'%</div></div>';
-    h+='</div>';
-    // 신호 일치 바
-    h+='<div style="height:6px;background:var(--s2)"><div style="height:100%;width:'+cj.score+'%;background:'+color+'"></div></div>';
-    // 하단: 동의/반대 신호
-    if(cj.agrees.length||cj.disagrees.length){
-      h+='<div style="padding:12px 18px;background:var(--s2);display:grid;grid-template-columns:1fr 1fr;gap:10px">';
-      h+='<div><div style="font-size:11px;font-weight:700;color:#22c55e;margin-bottom:5px">✅ 매수 지지 ('+cj.agrees.length+')</div>';
-      cj.agrees.slice(0,4).forEach(function(a){ h+='<div style="font-size:11px;color:var(--tx);margin-bottom:3px">• '+a.t+'</div>'; });
-      h+='</div>';
-      h+='<div><div style="font-size:11px;font-weight:700;color:#ef4444;margin-bottom:5px">⚠ 주의 신호 ('+cj.disagrees.length+')</div>';
-      cj.disagrees.slice(0,4).forEach(function(a){ h+='<div style="font-size:11px;color:var(--mt);margin-bottom:3px">• '+a.t+'</div>'; });
-      h+='</div>';
-      h+='</div>';
-    }
-    if(cj.action){
-      h+='<div style="padding:10px 18px;background:'+color+'15;font-size:12px;font-weight:600;color:'+color+'">💡 권장 액션: '+cj.action+'</div>';
-    }
-    h+='</div>';
-    return h;
-  })()
+  // 최종 판단 배너
+  +'<div style="padding:16px 18px;border-radius:12px;background:'+bgC+';border:2px solid '+color+';margin-bottom:20px;display:flex;align-items:center;gap:14px">'
+  +'<div style="font-size:30px;flex-shrink:0">🏁</div>'
+  +'<div style="flex:1">'
+  +'<div style="font-size:22px;font-weight:900;color:'+color+'">'+finalJudge+'</div>'
+  +'<div style="font-size:13px;color:var(--mt);margin-top:5px">'+structLabel+' &nbsp;|&nbsp; 현재가 '+(p?'<b style="color:var(--tx)">'+fp(p)+'</b>':'미입력')+' — '+posStr+'</div>'
+  +'</div></div>'
 
   // 가격 테이블
   + priceSummary
