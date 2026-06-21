@@ -253,11 +253,12 @@ window._ctAutoAnalyze = async function(symbol){
   // ── 0순위: Worker 배포 확인 (/ping) ──
   var pingRes = await _tryFetch('/ping', 5000);
   var workerDeployed = !!(pingRes.ok && pingRes.ok.worker);
+  var pingDiag = 'ping:'+( pingRes.ok ? 'ok(v'+( pingRes.ok.v||'?')+')' : pingRes.error );
 
   // ── 1순위: Cloudflare Worker ──
   var wRes = workerDeployed
     ? await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 15000)
-    : {error:'worker_not_deployed'};
+    : {error:'not_deployed'};
   if(wRes.ok){
     try {
       var res=wRes.ok.chart.result[0], meta=res.meta, q=res.indicators.quote[0];
@@ -309,9 +310,10 @@ window._ctAutoAnalyze = async function(symbol){
   }
 
   // ── 전부 실패 ──
-  var workerStatus = workerDeployed ? '✅ 배포됨' : '❌ 미배포 또는 오류';
-  var errSummary = 'Worker: '+(workerDeployed?wRes.error:'not_deployed')
-    +' | '+(fetched.errors||[]).filter(Boolean).slice(0,2).join(' | ');
+  var workerStatus = workerDeployed ? '✅ 배포됨' : '❌ 미배포 또는 충돌';
+  var errSummary = pingDiag
+    +' | quote:'+(workerDeployed?wRes.error:'skipped')
+    +' | proxy:'+(fetched.errors||[]).filter(Boolean).slice(0,1).join('');
   out.innerHTML = '<div style="margin-top:12px;padding:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.25);border-radius:12px">'
   +'<div style="font-size:14px;font-weight:800;color:#ef4444;margin-bottom:10px">⚠ 시세 데이터 수집 불가</div>'
   +'<div style="padding:10px 12px;background:var(--s2);border:1px solid var(--bd);border-radius:8px;margin-bottom:10px;font-size:12px;color:var(--mt)">'

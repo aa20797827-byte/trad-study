@@ -1,9 +1,10 @@
 /**
  * Cloudflare Pages Advanced Mode Worker
- * /ping       → 헬스체크 (Worker 배포 확인)
- * /api/quote  → 주가 데이터 (Yahoo Finance → Stooq 폴백)
- * /api/news   → 뉴스
- * 그 외        → env.ASSETS (정적 파일)
+ * - AbortSignal.timeout() 제거 → AbortController + setTimeout (호환성)
+ * - /ping → Worker 헬스체크
+ * - /api/quote → Yahoo Finance → Stooq 폴백
+ * - /api/news  → Yahoo Finance 뉴스
+ * - 그 외      → 정적 파일 (env.ASSETS)
  */
 
 export default {
@@ -11,15 +12,24 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === 'OPTIONS') {
-      return cors();
+      return new Response(null, {
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
     }
 
-    if (url.pathname === '/ping') {
-      return jsonResp({ status: 'ok', worker: true, ts: Date.now() });
+    try {
+      if (url.pathname === '/ping') {
+        return jsonResp({ ok: true, worker: true, v: 4 });
+      }
+      if (url.pathname === '/api/quote') return await handleQuote(url);
+      if (url.pathname === '/api/news')  return await handleNews(url);
+    } catch (err) {
+      return jsonResp({ error: String(err) }, 500);
     }
-
-    if (url.pathname === '/api/quote') return handleQuote(url);
-    if (url.pathname === '/api/news')  return handleNews(url);
 
     if (env && env.ASSETS) {
       return env.ASSETS.fetch(request);
@@ -28,58 +38,92 @@ export default {
   },
 };
 
-// ── Yahoo Finance 주가 ──
+// ── 주가 데이터 ──
 async function handleQuote(url) {
   const sym = sanitize(url.searchParams.get('symbol'));
   if (!sym) return jsonResp({ error: 'symbol_missing' }, 400);
 
-  const hdrs = yahooHdrs();
-
-  // Yahoo Finance (query1 → query2)
-  for (const host of ['query1', 'query2']) {
-    try {
-      const target = `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=6mo&includePrePost=false`;
-      const resp = await fetch(target, {
-        headers: hdrs,
-        signal: AbortSignal.timeout(8000),   // ← 8초 타임아웃 (Cloudflare 30초 제한 이내)
-      });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      if (data && data.chart && data.chart.result && data.chart.result[0]) {
-        return jsonResp(data);
-      }
-    } catch (_) { continue; }
+  // 1. Yahoo Finance
+  const yahoo = await yf('/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=6mo&includePrePost=false');
+  if (yahoo && yahoo.chart && yahoo.chart.result && yahoo.chart.result[0]) {
+    return jsonResp(yahoo);
   }
 
-  // Stooq CSV 폴백 (Yahoo 차단 시)
-  const stooqData = await fetchStooqWorker(sym);
-  if (stooqData) return jsonResp(stooqData);
+  // 2. Stooq CSV 폴백
+  const stooq = await fetchStooq(sym);
+  if (stooq) return jsonResp(stooq);
 
-  return jsonResp({ error: 'all_sources_failed' }, 502);
+  return jsonResp({ error: 'all_failed' }, 502);
 }
 
-// ── Stooq CSV (Yahoo Finance 차단 시 폴백) ──
-async function fetchStooqWorker(sym) {
+// ── 뉴스 ──
+async function handleNews(url) {
+  const sym = sanitize(url.searchParams.get('symbol'));
+  if (!sym) return jsonResp({ error: 'symbol_missing' }, 400);
+
+  const data = await yf('/v1/finance/search?q=' + encodeURIComponent(sym) + '&newsCount=8&quotesCount=0&enableCb=false');
+  if (data && data.news && data.news.length) {
+    return jsonResp({
+      news: data.news.map(function(n) {
+        return { title: n.title || '', publisher: n.publisher || '', link: n.link || '', publishedAt: n.providerPublishTime || 0 };
+      }),
+    });
+  }
+  return jsonResp({ news: [] });
+}
+
+// ── Yahoo Finance fetch (query1 → query2, AbortController 방식) ──
+async function yf(path) {
+  for (const host of ['query1', 'query2']) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(function() { ctrl.abort(); }, 8000);
+    try {
+      const resp = await fetch('https://' + host + '.finance.yahoo.com' + path, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/json, text/plain, */*',
+          'Referer': 'https://finance.yahoo.com/',
+          'Origin': 'https://finance.yahoo.com',
+        },
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      if (data) return data;
+    } catch (_) {
+      clearTimeout(timer);
+      continue;
+    }
+  }
+  return null;
+}
+
+// ── Stooq CSV 폴백 ──
+async function fetchStooq(sym) {
   const stooqSym = toStooqSym(sym);
   if (!stooqSym) return null;
-
   const currency = stooqSym.endsWith('.ko') ? 'KRW' : 'USD';
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSym)}&i=d&l=130`;
 
+  const ctrl = new AbortController();
+  const timer = setTimeout(function() { ctrl.abort(); }, 8000);
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    const resp = await fetch(
+      'https://stooq.com/q/d/l/?s=' + encodeURIComponent(stooqSym) + '&i=d&l=130',
+      { signal: ctrl.signal }
+    );
+    clearTimeout(timer);
     if (!resp.ok) return null;
     const csv = await resp.text();
     const rows = parseCSV(csv);
     if (!rows || rows.length < 5) return null;
 
-    // Yahoo Finance 형식으로 변환
     return {
       chart: {
         result: [{
           meta: {
             regularMarketPrice: rows[rows.length - 1].c,
-            currency,
+            currency: currency,
             shortName: stooqSym.toUpperCase(),
           },
           timestamp: rows.map(function(r) { return r.ts; }),
@@ -96,7 +140,10 @@ async function fetchStooqWorker(sym) {
         error: null,
       },
     };
-  } catch (_) { return null; }
+  } catch (_) {
+    clearTimeout(timer);
+    return null;
+  }
 }
 
 function toStooqSym(sym) {
@@ -119,57 +166,22 @@ function parseCSV(csv) {
     const c = parseFloat(p[ci]);
     if (!c || c <= 0) continue;
     rows.push({
-      ts: Math.floor(new Date(p[di]).getTime() / 1000),
-      o: parseFloat(p[oi]) || c, h: parseFloat(p[hi]) || c,
-      l: parseFloat(p[li]) || c, c, v: parseInt(p[vi]) || 0,
+      ts: Math.floor(new Date(p[di] || '').getTime() / 1000) || 0,
+      o: parseFloat(p[oi]) || c,
+      h: parseFloat(p[hi]) || c,
+      l: parseFloat(p[li]) || c,
+      c: c,
+      v: parseInt(p[vi]) || 0,
     });
   }
-  // Stooq: 최신 → 첫 줄, 역순 필요
   if (rows.length > 1 && rows[0].ts > rows[rows.length - 1].ts) rows.reverse();
   return rows.length >= 5 ? rows : null;
 }
 
-// ── Yahoo Finance 뉴스 ──
-async function handleNews(url) {
-  const sym = sanitize(url.searchParams.get('symbol'));
-  if (!sym) return jsonResp({ error: 'symbol_missing' }, 400);
-
-  const hdrs = yahooHdrs();
-
-  for (const host of ['query1', 'query2']) {
-    try {
-      const target = `https://${host}.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(sym)}&newsCount=8&quotesCount=0&enableCb=false`;
-      const resp = await fetch(target, { headers: hdrs, signal: AbortSignal.timeout(8000) });
-      if (!resp.ok) continue;
-      const data = await resp.json();
-      const news = (data.news || []).map(function(n) {
-        return { title: n.title || '', publisher: n.publisher || '', link: n.link || '', publishedAt: n.providerPublishTime || 0 };
-      });
-      if (news.length) return jsonResp({ news });
-    } catch (_) { continue; }
-  }
-
-  return jsonResp({ news: [] });
-}
-
-// ── 헬퍼 ──
 function sanitize(raw) {
   return (raw || '').replace(/[^A-Z0-9.\-\^]/gi, '').slice(0, 20);
 }
-function yahooHdrs() {
-  return {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'application/json, text/plain, */*',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Referer': 'https://finance.yahoo.com/',
-    'Origin': 'https://finance.yahoo.com',
-  };
-}
-function cors() {
-  return new Response(null, {
-    headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' },
-  });
-}
+
 function jsonResp(data, status) {
   return new Response(JSON.stringify(data), {
     status: status || 200,
