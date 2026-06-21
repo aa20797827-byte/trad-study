@@ -157,6 +157,110 @@ async function fetchYahoo(ticker){
   return {data:null, errors:lastErrors};
 }
 
+// ══════════════════════════════════════
+// ── 네이버 금융 API (한국 주식 전용, 프록시 불필요) ──
+// ══════════════════════════════════════
+async function fetchNaver(rawSym){
+  var sym = rawSym.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
+  if(!/^\d{4,6}$/.test(sym)) return null; // 한국 주식 코드만
+
+  var urls = [
+    // 1. 네이버 금융 차트 API (일봉 130개)
+    'https://api.stock.naver.com/chart/domestic/candles/D?symbol='+sym+'&count=130',
+    // 2. 네이버 금융 fchart (구형, 데이터 다를 수 있음)
+    'https://fchart.stock.naver.com/sise.nhn?symbol='+sym+'&timeframe=day&count=130&requestType=0',
+  ];
+
+  // 1번 시도: JSON 형식
+  try {
+    var ctrl1 = new AbortController();
+    var t1 = setTimeout(function(){ ctrl1.abort(); }, 5000);
+    var r1 = await fetch(urls[0], {signal: ctrl1.signal});
+    clearTimeout(t1);
+    if(r1.ok){
+      var d1 = await r1.json();
+      // 네이버 응답: [{localDate, openPrice, highPrice, lowPrice, closePrice, accumulatedTradingVolume}, ...]
+      if(d1 && d1.length >= 5){
+        var rows = d1.filter(function(r){ return r.closePrice > 0; });
+        if(rows.length >= 5){
+          return {
+            closes: rows.map(function(r){ return +r.closePrice; }),
+            opens:  rows.map(function(r){ return +r.openPrice; }),
+            highs:  rows.map(function(r){ return +r.highPrice; }),
+            lows:   rows.map(function(r){ return +r.lowPrice; }),
+            vols:   rows.map(function(r){ return +(r.accumulatedTradingVolume||r.tradingVolume||0); }),
+            curPrice: +rows[rows.length-1].closePrice,
+            currency: 'KRW', name: sym, source: '네이버금융'
+          };
+        }
+      }
+    }
+  } catch(_){}
+
+  // 2번 시도: fchart XML 파싱
+  try {
+    var ctrl2 = new AbortController();
+    var t2 = setTimeout(function(){ ctrl2.abort(); }, 5000);
+    var r2 = await fetch(urls[1], {signal: ctrl2.signal});
+    clearTimeout(t2);
+    if(r2.ok){
+      var txt = await r2.text();
+      // <item data="20240621|76500|75000|77000|74500|13000000" />
+      var items = [...txt.matchAll(/data="(\d{8})\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)"/g)];
+      if(items.length >= 5){
+        return {
+          closes: items.map(function(m){ return +m[2]; }),
+          opens:  items.map(function(m){ return +m[3]; }),
+          highs:  items.map(function(m){ return +m[4]; }),
+          lows:   items.map(function(m){ return +m[5]; }),
+          vols:   items.map(function(m){ return +m[6]; }),
+          curPrice: +items[items.length-1][2],
+          currency: 'KRW', name: sym, source: '네이버금융(fchart)'
+        };
+      }
+    }
+  } catch(_){}
+
+  return null;
+}
+
+// ── Alpha Vantage (무료 API 키 필요, 미국·한국 주식 지원, CORS 허용) ──
+async function fetchAlphaVantage(rawSym){
+  var key = localStorage.getItem('av_api_key');
+  if(!key) return null;
+
+  var sym = rawSym.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
+  // 한국 주식은 KRX 접미사 추가
+  if(/^\d{4,6}$/.test(sym)) sym = sym+'.KRX';
+
+  try {
+    var ctrl = new AbortController();
+    var timer = setTimeout(function(){ ctrl.abort(); }, 10000);
+    var url = 'https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol='+encodeURIComponent(sym)+'&outputsize=compact&apikey='+encodeURIComponent(key);
+    var resp = await fetch(url, {signal: ctrl.signal});
+    clearTimeout(timer);
+    if(!resp.ok) return null;
+    var data = await resp.json();
+
+    var ts = data['Time Series (Daily)'];
+    if(!ts) return null;
+
+    var dates = Object.keys(ts).sort(); // 오름차순
+    if(dates.length < 5) return null;
+
+    var isCurrency = sym.endsWith('.KRX') ? 'KRW' : 'USD';
+    return {
+      closes: dates.map(function(d){ return +ts[d]['4. close']; }),
+      opens:  dates.map(function(d){ return +ts[d]['1. open']; }),
+      highs:  dates.map(function(d){ return +ts[d]['2. high']; }),
+      lows:   dates.map(function(d){ return +ts[d]['3. low']; }),
+      vols:   dates.map(function(d){ return +ts[d]['6. volume']||0; }),
+      curPrice: +ts[dates[dates.length-1]]['4. close'],
+      currency: isCurrency, name: sym, source: 'Alpha Vantage'
+    };
+  } catch(_){ return null; }
+}
+
 // ── Stooq.com 시세 (Yahoo Finance 차단 시 대안) ──
 function toStooqSym(raw){
   var sym = raw.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
@@ -250,12 +354,35 @@ window._ctAutoAnalyze = async function(symbol){
 
   var ticker = toYahooTicker(symbol);
 
-  // ── 0순위: Worker 배포 확인 (/ping) ──
+  // ── 0-A순위: 네이버 금융 (한국 주식 전용, 프록시 불필요) ──
+  var naverSym = ticker.replace(/\.(KS|KQ)$/,'');
+  if(/^\d{4,6}$/.test(naverSym)){
+    out.innerHTML = loading(symbol + ' (네이버 금융)');
+    var naver = await fetchNaver(naverSym);
+    if(naver && naver.closes && naver.closes.length >= 5){
+      _showAnalysis(out, ticker, naver.closes, naver.opens, naver.highs, naver.lows, naver.vols,
+        naver.curPrice, 'KRW', naver.name, naver.source);
+      return;
+    }
+  }
+
+  // ── 0-B순위: Alpha Vantage (무료 API 키 설정 시) ──
+  if(localStorage.getItem('av_api_key')){
+    out.innerHTML = loading(symbol + ' (Alpha Vantage)');
+    var av = await fetchAlphaVantage(symbol);
+    if(av && av.closes && av.closes.length >= 5){
+      _showAnalysis(out, ticker, av.closes, av.opens, av.highs, av.lows, av.vols,
+        av.curPrice, av.currency, av.name, av.source);
+      return;
+    }
+  }
+
+  // ── 1순위: Cloudflare Worker ──
+  out.innerHTML = loading(symbol);
   var pingRes = await _tryFetch('/ping', 5000);
   var workerDeployed = !!(pingRes.ok && pingRes.ok.worker);
   var pingDiag = 'ping:'+( pingRes.ok ? 'ok(v'+( pingRes.ok.v||'?')+')' : pingRes.error );
 
-  // ── 1순위: Cloudflare Worker ──
   var wRes = workerDeployed
     ? await _tryFetch('/api/quote?symbol='+encodeURIComponent(ticker), 15000)
     : {error:'not_deployed'};
@@ -339,8 +466,24 @@ window._ctAutoAnalyze = async function(symbol){
   +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">박스 하단 (지지)</div>'
   +'<input id="ct-quick-lower" class="ct-sym-in" type="number" placeholder="지지가"></div>'
   +'</div>'
-  +'<button onclick="window._ctQuickAnalyze()" style="width:100%;padding:12px;background:var(--ac);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer">📊 차트 분석 실행</button>'
+  +'<button onclick="window._ctQuickAnalyze()" style="width:100%;padding:12px;background:var(--ac);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px">📊 차트 분석 실행</button>'
+  +'<button onclick="window._ctSetAvKey()" style="width:100%;padding:10px;background:var(--s1);color:var(--mt);border:1px solid var(--bd);border-radius:10px;font-size:12px;cursor:pointer">'
+  +'🔑 Alpha Vantage 무료 API 키 설정 (미국·한국 주식 자동 수집)'+(localStorage.getItem('av_api_key')?' ✅ 설정됨':'')+'</button>'
   +'</div></div>';
+};
+
+// Alpha Vantage API 키 설정
+window._ctSetAvKey = function(){
+  var cur = localStorage.getItem('av_api_key')||'';
+  var key = prompt('Alpha Vantage 무료 API 키를 입력하세요.\n(https://www.alphavantage.co/support/#api-key 에서 무료 발급)\n\n현재: '+(cur?'설정됨':'없음'), cur);
+  if(key===null) return; // 취소
+  if(key.trim()){
+    localStorage.setItem('av_api_key', key.trim());
+    alert('✅ API 키 저장 완료! 이제 종목을 다시 검색하면 자동으로 데이터를 가져옵니다.');
+  } else {
+    localStorage.removeItem('av_api_key');
+    alert('API 키 삭제됨');
+  }
 };
 
 // 에러 화면에서 직접 입력 분석
