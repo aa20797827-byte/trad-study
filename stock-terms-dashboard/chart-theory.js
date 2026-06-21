@@ -15,6 +15,8 @@ window.showChart = function(){
   _tvLoaded = false;
   wrap.innerHTML = buildCSS() + buildHero() + buildTabBar() + buildTabContent();
   window._ctSwitchTab('chart');
+  // 기본 종목 자동 데이터 로드
+  setTimeout(function(){ window._ctAutoFill(_ctSymbol); }, 600);
 };
 
 // ── 탭 전환 ──
@@ -57,8 +59,130 @@ window._ctChangeSymbol = function(){
   var box = document.getElementById('ct-tv-box');
   if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">차트 로딩 중...</div>';
   setTimeout(function(){ initTV(); _tvLoaded=true; }, 50);
-  // 자동 분석 실행
-  window._ctAutoAnalyze(sym);
+  // 차트 데이터 자동 로드
+  window._ctAutoFill(sym);
+};
+
+// ══════════════════════════════════════
+// ── TradingView 데이터 자동 입력 ──
+// ══════════════════════════════════════
+
+// TV 심볼 변환
+function toTVSym(sym){
+  var raw=sym.toUpperCase().replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,'');
+  return /^\d{4,6}$/.test(raw)?'KRX:'+raw:raw;
+}
+
+// 1) TradingView Quotes API (현재가·고저·52주 고저)
+//    - TradingView 위젯이 직접 사용하는 API → CORS *
+async function tvQuotes(sym){
+  var tvSym=toTVSym(sym);
+  try{
+    var ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},6000);
+    var r=await fetch('https://quotes.tradingview.com/quotes/?symbols='+encodeURIComponent(tvSym),{signal:ctrl.signal});
+    clearTimeout(t);
+    if(!r.ok) return null;
+    var d=await r.json();
+    var v=d&&d.p&&d.p[0]&&d.p[0].s==='ok'?d.p[0].v:null;
+    if(!v||!v.lp) return null;
+    return {
+      price:   v.lp,
+      high:    v.high_price,
+      low:     v.low_price,
+      open:    v.open_price,
+      vol:     v.volume,
+      w52h:    v.week52_high,
+      w52l:    v.week52_low,
+      chp:     v.chp,
+      name:    v.short_name||tvSym,
+      currency:v.currency_code||(/^\d{4,6}$/.test(sym.replace(/^(KRX|KRSE):/,'').replace(/\.(KS|KQ)$/,''))?'KRW':'USD')
+    };
+  }catch(_){return null;}
+}
+
+// 2) TradingView Scanner (SMA·RSI·MACD·1개월 고저)
+//    - TV 스크리너 웹앱이 사용하는 API
+async function tvScan(sym){
+  var tvSym=toTVSym(sym);
+  var isKR=/^\d{4,6}$/.test(tvSym.replace('KRX:',''));
+  var url='https://scanner.tradingview.com/'+(isKR?'korea':'america')+'/scan';
+  var cols=['close','SMA20','SMA50','RSI','MACD.hist','BB.upper','BB.lower','High.1M','Low.1M','High.3M','Low.3M'];
+  try{
+    var ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},6000);
+    var r=await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({symbols:{tickers:[tvSym],query:{types:[]}},columns:cols}),
+      signal:ctrl.signal
+    });
+    clearTimeout(t);
+    if(!r.ok) return null;
+    var d=await r.json();
+    if(!d.data||!d.data[0]) return null;
+    var vals=d.data[0].d, res={};
+    cols.forEach(function(c,i){res[c]=vals[i];});
+    return res;
+  }catch(_){return null;}
+}
+
+// 자동 폼 채우기
+window._ctAutoFill = async function(sym){
+  // 입력 폼에 로딩 표시
+  var statusEl = document.getElementById('ct-fill-status');
+  if(statusEl) statusEl.textContent = '⏳ 데이터 로딩 중...';
+
+  var q=null, s=null;
+
+  // 병렬로 Quotes + Scanner 동시 시도
+  var results = await Promise.allSettled([tvQuotes(sym), tvScan(sym)]);
+  if(results[0].status==='fulfilled') q=results[0].value;
+  if(results[1].status==='fulfilled') s=results[1].value;
+
+  if(!q && !s){
+    if(statusEl) statusEl.textContent = '⚠ 자동 입력 실패 — 차트 보고 직접 입력해 주세요';
+    return;
+  }
+
+  var price  = q?q.price:(s&&s.close)||0;
+  var currency= q?q.currency:'KRW';
+  var sma20  = s&&s.SMA20  ? Math.round(s.SMA20)  : null;
+  var sma60  = s&&s.SMA50  ? Math.round(s.SMA50)  : null;
+  var rsi    = s&&s.RSI    ? Math.round(s.RSI*10)/10 : null;
+  var machV  = s&&s['MACD.hist'] ? Math.round(s['MACD.hist']*100)/100 : null;
+
+  // 저항 = 1개월 고점 > 오늘 고점 > 52주 고점
+  var upper  = (s&&s['High.1M']) || (q&&q.high) || (q&&q.w52h) || 0;
+  // 지지   = 1개월 저점 > 오늘 저점 > 52주 저점
+  var lower  = (s&&s['Low.1M'])  || (q&&q.low)  || (q&&q.w52l) || 0;
+
+  // 추세 자동 판단
+  var struct = 'box';
+  if(sma20&&sma60){
+    if(price>sma20&&sma20>sma60) struct='trend-up';
+    else if(price<sma20&&sma20<sma60) struct='trend-down';
+  } else if(q&&q.w52h&&q.w52l){
+    var pos=(price-q.w52l)/(q.w52h-q.w52l);
+    if(pos>0.7) struct='trend-up';
+    else if(pos<0.3) struct='trend-down';
+  }
+
+  // 폼 채우기
+  function setV(id,v){ var el=document.getElementById(id); if(el&&v) el.value=v; }
+  setV('ct-c-price',   Math.round(price*100)/100);
+  setV('ct-c-upper',   Math.round(upper));
+  setV('ct-c-lower',   Math.round(lower));
+  setV('ct-c-rsi',     rsi);
+  setV('ct-c-macdh',   machV);
+  setV('ct-c-sma20',   sma20);
+  setV('ct-c-sma60',   sma60);
+  var se=document.getElementById('ct-c-struct'); if(se) se.value=struct;
+  var ce=document.getElementById('ct-c-currency'); if(ce) ce.value=currency;
+
+  if(statusEl){
+    var src = (q?'Quotes':'')+(s?' + Scanner':'');
+    statusEl.textContent = '✅ 자동 입력 완료 ('+src+') — 확인 후 분석 실행 클릭';
+    statusEl.style.color='#22c55e';
+  }
 };
 
 // ══════════════════════════════════════
@@ -2076,12 +2200,15 @@ function buildChartPane(){
   +'</div>'
 
   // TradingView 차트
-  +'<div id="ct-tv-box" style="height:500px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:16px"></div>'
+  +'<div id="ct-tv-box" style="height:500px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:12px"></div>'
 
-  // 입력 폼 (차트 보면서 직접 입력)
+  // 자동 입력 상태
+  +'<div id="ct-fill-status" style="font-size:12px;color:#6b7280;margin-bottom:12px;padding:8px 12px;background:var(--s2);border-radius:8px;border:1px solid var(--bd)">⏳ 종목 입력 후 자동으로 가격·지지·저항·추세가 채워집니다</div>'
+
+  // 입력 폼
   +'<div style="background:var(--bg);border:1.5px solid var(--bd);border-radius:14px;padding:18px">'
-  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📊 위 차트를 보고 입력하면 바로 분석됩니다</div>'
-  +'<div style="font-size:12px;color:#6b7280;margin-bottom:16px">TradingView 차트에서 현재가·지지·저항 읽기 → 아래 입력 → 분석 실행</div>'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📊 차트 분석</div>'
+  +'<div style="font-size:12px;color:#6b7280;margin-bottom:16px">값이 자동 채워집니다. 필요하면 수정 후 분석 실행하세요.</div>'
 
   // 현재가 + 추세
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">'
