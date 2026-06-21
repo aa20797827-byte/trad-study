@@ -33,17 +33,19 @@ function svgbox(svg,label){ return '<div style="background:rgba(255,255,255,.03)
 var s1 = (function(){
   // SVG 1: 캔들 기본 해부 (OHLC + 양봉/음봉)
   var anat = vb(440,165, bg(440,165)
+    // ── 양봉 (bull=true): 시초가(Open)<종가(Close), 종가가 위(낮은y), 시초가가 아래(높은y)
     +C(75,12,42,108,140,true)
     +L(77,12,145,12,'#ef4444')+T(148,16,'고가(High)','#ef4444',10)
-    +L(84,42,145,42,'#9ca3af')+T(148,46,'시초가(Open)','#9ca3af',10)
+    +L(84,42,145,42,'#22c55e')+T(148,46,'종가(Close) ↑','#22c55e',10)
     +T(20,78,'몸통','#22c55e',10)
-    +L(84,108,145,108,'#22c55e')+T(148,112,'종가(Close)','#22c55e',10)
+    +L(84,108,145,108,'#9ca3af')+T(148,112,'시초가(Open)','#9ca3af',10)
     +L(77,140,145,140,'#60a5fa')+T(148,144,'저가(Low)','#60a5fa',10)
     +T(14,28,'위꼬리','#6b7280',9)+T(14,125,'아래꼬리','#6b7280',9)
     +T(40,160,'◀ 양봉 (종가>시초가)','#22c55e',9)
+    // ── 음봉 (bull=false): 시초가(Open)>종가(Close), 시초가가 위(낮은y), 종가가 아래(높은y)
     +C(295,12,42,108,140,false)
     +L(303,42,365,42,'#ef4444')+T(368,46,'시초가(Open)','#ef4444',10)
-    +L(303,108,365,108,'#9ca3af')+T(368,112,'종가(Close)','#9ca3af',10)
+    +L(303,108,365,108,'#9ca3af')+T(368,112,'종가(Close) ↓','#9ca3af',10)
     +T(254,78,'몸통','#ef4444',10)
     +T(255,160,'음봉 (종가<시초가) ▶','#ef4444',9)
   );
@@ -4005,17 +4007,55 @@ var s25 = (function(){
 })();
 
 // ════════════════════════════════════════════
-// 최종 showTA 함수 재정의
+// 탭별 섹션 그룹 정의
+// ════════════════════════════════════════════
+var _taActiveTab = 'candle';
+
+var _taGroups = {
+  candle: function(){ return s1+s2+s2b+s2c+s20+s33+s36; },
+  pattern: function(){ return s5+s23+s30+s37+s41; },
+  indicator: function(){ return s3+s21+s32+s4+s38+s39+s40+s26+s27+s42+s22+s14+s15+s16+s6+s24+s28; },
+  volume: function(){ return s7+s29+s17+s18+s45; },
+  strategy: function(){ return s8+s9+s25+s31+s34+s35+s43+s44+s46+s47; },
+  advanced: function(){ return s10+s11+s12+s13+s19; }
+};
+
+// ════════════════════════════════════════════
+// 최종 showTA 함수 재정의 (탭 기반)
 // ════════════════════════════════════════════
 window.showTA = function(){
   var wrap = document.getElementById('tawrap');
   if(!wrap) return;
-  wrap.innerHTML = '<style>'
-  +'.ta-hero{text-align:center;padding:20px 16px 14px;border-bottom:1px solid var(--bd);margin-bottom:16px}'
-  +'.ta-hero h2{font-size:20px;font-weight:800;margin-bottom:6px}'
-  +'.ta-hero p{color:var(--mt);font-size:12px}'
-  +'.ta-section{margin-bottom:24px}'
-  +'.ta-section-title{font-size:14px;font-weight:700;color:var(--tx);padding:10px 14px;background:var(--s2);border-radius:10px;margin-bottom:12px;border-left:3px solid var(--ac)}'
+
+  var tabDefs = [
+    {id:'candle',   label:'🕯 캔들스틱',  desc:'캔들 기초·단일·복합 패턴'},
+    {id:'pattern',  label:'📐 차트 패턴', desc:'H&S·삼각형·컵핸들·웨지 등'},
+    {id:'indicator',label:'🔧 보조 지표', desc:'RSI·MACD·볼밴·피보나치 등'},
+    {id:'volume',   label:'📊 거래량',    desc:'OBV·VP·클라이맥스·갭'},
+    {id:'strategy', label:'🎯 매매 전략', desc:'진입·손절·포지션·MTF'},
+    {id:'advanced', label:'🌊 심화 분석', desc:'일목·엘리엇·와이코프·VWAP'}
+  ];
+
+  var tabBtns = tabDefs.map(function(t){
+    var on = _taActiveTab===t.id;
+    return '<button onclick="window._taTab(\''+t.id+'\')" style="'
+      +'display:inline-flex;flex-direction:column;align-items:center;'
+      +'padding:10px 14px;border-radius:10px;border:1.5px solid '+(on?'var(--ac)':'var(--bd)')+';'
+      +'background:'+(on?'var(--ac)':'var(--s2)')+';color:'+(on?'#fff':'var(--mt)')+';'
+      +'cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;min-width:88px;'
+      +'transition:all .2s">'
+      +t.label+'<span style="font-size:9px;opacity:.75;margin-top:2px;font-weight:400">'+t.desc+'</span>'
+      +'</button>';
+  }).join('');
+
+  var css = '<style>'
+  +'.ta-hero{text-align:center;padding:16px 16px 12px;border-bottom:1px solid var(--bd);margin-bottom:0}'
+  +'.ta-hero h2{font-size:18px;font-weight:800;margin-bottom:4px}'
+  +'.ta-nav{display:flex;gap:8px;padding:12px 16px;overflow-x:auto;background:var(--s1);border-bottom:1px solid var(--bd);scrollbar-width:none}'
+  +'.ta-nav::-webkit-scrollbar{display:none}'
+  +'.ta-content{padding:0}'
+  +'.ta-section{margin-bottom:20px}'
+  +'.ta-section-title{font-size:14px;font-weight:700;color:var(--tx);padding:10px 14px;background:var(--s2);border-radius:10px;margin-bottom:10px;border-left:3px solid var(--ac)}'
   +'.ta-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}'
   +'.ta-card{background:var(--s2);border-radius:10px;border:1px solid var(--bd);overflow:hidden}'
   +'.ta-card-title{font-size:12px;font-weight:700;padding:10px 14px;background:var(--s3);border-bottom:1px solid var(--bd)}'
@@ -4027,27 +4067,25 @@ window.showTA = function(){
   +'.ta-ma-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}'
   +'.ta-ma-chip{padding:4px 10px;border-radius:20px;font-size:11px;border:1px solid}'
   +'@media(max-width:640px){.ta-grid{grid-template-columns:1fr}}'
-  +'</style>'
-  +'<div class="ta-hero"><h2>📈 기술적 분석 완전 시각 가이드</h2>'
-  +'<div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:8px">'
-  +'<span style="padding:3px 10px;border-radius:12px;font-size:10px;background:rgba(34,197,94,.15);color:#22c55e">🟢 초급 STEP1~4</span>'
-  +'<span style="padding:3px 10px;border-radius:12px;font-size:10px;background:rgba(59,130,246,.15);color:#60a5fa">🔵 중급 이평·오실레이터·지지저항·거래량</span>'
-  +'<span style="padding:3px 10px;border-radius:12px;font-size:10px;background:rgba(168,85,247,.15);color:#c084fc">🟣 고급 차트패턴·시장구조·실전매매</span>'
-  +'<span style="padding:3px 10px;border-radius:12px;font-size:10px;background:rgba(239,68,68,.15);color:#f87171">🔴 전문가 일목·엘리엇·와이코프·VP</span>'
-  +'</div></div>'
-  + s1 + s2 + s2b + s2c + s33
-  + s20 + s36
-  + s3 + s32 + s21
-  + s4 + s38 + s39 + s40 + s26 + s27 + s42 + s22
-  + s28 + s14 + s15 + s16
-  + s30 + s31
-  + s5 + s23 + s34 + s37 + s41
-  + s6 + s24
-  + s7 + s29 + s17 + s18
-  + s8 + s9 + s35 + s25
-  + s43 + s44
-  + s45 + s46 + s47
-  + s10 + s11 + s12 + s13 + s19;
+  +'</style>';
+
+  var hero = '<div class="ta-hero">'
+  +'<h2>📈 기술적 분석 완전 시각 가이드</h2>'
+  +'<p style="color:var(--mt);font-size:11px">아래 탭을 선택해 원하는 주제만 빠르게 확인하세요</p>'
+  +'</div>';
+
+  var nav = '<div class="ta-nav">'+tabBtns+'</div>';
+
+  var content = (_taGroups[_taActiveTab] || _taGroups.candle)();
+
+  wrap.innerHTML = css + hero + nav + '<div class="ta-content">' + content + '</div>';
+
+  window._taTab = function(id){
+    _taActiveTab = id;
+    window.showTA();
+    document.getElementById('tawrap').scrollTop = 0;
+    document.getElementById('tawrap').parentElement.scrollTop = 0;
+  };
 };
 
 })();
