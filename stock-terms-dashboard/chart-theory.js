@@ -475,6 +475,145 @@ window._ctAnalyze = function(){
   document.getElementById('ct-output').scrollIntoView({behavior:'smooth', block:'start'});
 };
 
+// ── % 계산 헬퍼 ──
+function _pct(from, to){
+  if(!from||!to||from===0) return null;
+  var p=(to-from)/from*100;
+  return (p>=0?'+':'')+p.toFixed(1)+'%';
+}
+function _rr(entry, stop, target){
+  if(!entry||!stop||!target||entry===stop) return '';
+  var risk=Math.abs(entry-stop), reward=Math.abs(target-entry);
+  if(!risk) return ''; return '1:'+(reward/risk).toFixed(1);
+}
+
+// ── 차트 패턴 감지 ──
+function detectChartPatterns(closes, highs, lows){
+  var n=closes.length; if(n<20) return [];
+  var patterns=[];
+
+  // 1. 삼각수렴 (Triangle)
+  var pn=Math.min(30,n), rH=highs.slice(-pn), rL=lows.slice(-pn);
+  var sH=[], sL=[];
+  for(var i=1;i<pn-1;i++){
+    if(rH[i]>rH[i-1]&&rH[i]>rH[i+1]) sH.push({i:i,v:rH[i]});
+    if(rL[i]<rL[i-1]&&rL[i]<rL[i+1]) sL.push({i:i,v:rL[i]});
+  }
+  if(sH.length>=2&&sL.length>=2){
+    var hD=sH[sH.length-1].v<sH[sH.length-2].v;
+    var lR=sL[sL.length-1].v>sL[sL.length-2].v;
+    var hF=Math.abs(sH[sH.length-1].v-sH[sH.length-2].v)/Math.max(sH[0].v,0.001)<0.018;
+    var lF=Math.abs(sL[sL.length-1].v-sL[sL.length-2].v)/Math.max(sL[0].v,0.001)<0.018;
+    if(hD&&lR) patterns.push({name:'대칭삼각형 수렴 ▲▽',type:'neutral',
+      desc:'고점은 낮아지고 저점은 높아지며 수렴 중. 거래량 감소 동반 → 이탈 방향이 다음 추세 결정. 거래량 동반 돌파/이탈 시 추세 가속 가능.'});
+    else if(hF&&lR) patterns.push({name:'상승삼각형 (Ascending Triangle) ▲',type:'bullish',
+      desc:'저항선 수평 + 저점 점진 상승 → 매수세 축적 중. 저항 돌파 + 거래량 급증 시 강한 상승 이탈 가능.'});
+    else if(hD&&lF) patterns.push({name:'하락삼각형 (Descending Triangle) ▽',type:'bearish',
+      desc:'고점 점진 하락 + 지지선 수평 → 매도세 축적 중. 지지 이탈 + 거래량 급증 시 강한 하락 이탈 가능.'});
+  }
+
+  // 2. 불/베어 플래그 (Flag)
+  if(n>=25){
+    var pol=10, flg=10;
+    var pS=closes[n-pol-flg-1]||closes[0], pE=closes[n-flg-1];
+    var pM=(pE-pS)/Math.max(pS,0.001);
+    var fH=highs.slice(-flg), fL=lows.slice(-flg);
+    var fR=(Math.max.apply(null,fH)-Math.min.apply(null,fL))/Math.max(Math.abs(pE),0.001);
+    if(Math.abs(pM)>0.07&&fR<0.06){
+      if(pM>0) patterns.push({name:'불 플래그 (Bull Flag) 🚩',type:'bullish',
+        desc:'강한 상승(폴 '+(_pct(pS,pE)||'')+')'+'후 타이트한 횡보 조정(플래그 범위 '+Math.round(fR*100)+'%). 상방 이탈 + 거래량 증가 시 폴 높이만큼 추가 상승 가능.'});
+      else patterns.push({name:'베어 플래그 (Bear Flag) 🚩',type:'bearish',
+        desc:'강한 하락(폴 '+(_pct(pS,pE)||'')+')'+'후 타이트한 횡보 반등(플래그 범위 '+Math.round(fR*100)+'%). 하방 이탈 + 거래량 증가 시 추가 하락 가능.'});
+    }
+  }
+
+  // 3. 이중 바닥/천장 (Double Bottom/Top)
+  if(n>=40){
+    var h1=Math.max.apply(null,highs.slice(-40,-20)), h2=Math.max.apply(null,highs.slice(-20));
+    var l1=Math.min.apply(null,lows.slice(-40,-20)),  l2=Math.min.apply(null,lows.slice(-20));
+    var cur=closes[n-1];
+    if(Math.abs(h1-h2)/Math.max(h1,0.001)<0.025&&cur<(h1+h2)/2*0.97)
+      patterns.push({name:'이중천장 의심 (Double Top / M패턴) ⛰',type:'bearish',
+        desc:'두 고점이 유사한 가격대('+_pct(h1,h2)+'차)에서 저항. 목선(두 고점 사이 저점) 이탈 시 강한 하락 전환 신호.'});
+    if(Math.abs(l1-l2)/Math.max(l1,0.001)<0.025&&cur>(l1+l2)/2*1.03)
+      patterns.push({name:'이중바닥 확인 (Double Bottom / W패턴) 🏔',type:'bullish',
+        desc:'두 저점이 유사한 가격대('+_pct(l1,l2)+'차)에서 지지. 목선(두 저점 사이 고점) 돌파 시 강한 상승 전환 신호.'});
+  }
+
+  // 4. 추세선 돌파 (Trendline)
+  if(n>=20){
+    var r10h=highs.slice(-10), r10l=lows.slice(-10);
+    var maxH=Math.max.apply(null,r10h), minL=Math.min.apply(null,r10l);
+    var range=(maxH-minL)/Math.max(closes[n-1],0.001)*100;
+    if(range<4) patterns.push({name:'초압축 구간 (Tight Squeeze)',type:'neutral',
+      desc:'최근 10일 변동폭 '+range.toFixed(1)+'% 이하 초압축 → 볼린저 밴드 스퀴즈. 큰 방향성 이탈이 임박할 수 있음.'});
+  }
+
+  return patterns;
+}
+
+// ── 추세 흐름 분석 ──
+function buildTrendFlow(ind, closes, cur, fp){
+  var s=ind.sma, rsi=ind.rsi, mac=ind.macd, bb=ind.bb, vol=ind.vol;
+  var n=closes.length;
+  var bullets=[];
+
+  // MA 배열
+  if(s.s20&&s.s60){
+    if(s.s20>s.s60&&cur>s.s20)
+      bullets.push({c:'#22c55e', t:'MA 정배열 상승 추세 — SMA20>SMA60 (골든크로스) + 현재가>SMA20. 중기 상승 추세 유효.'});
+    else if(s.s20<s.s60&&cur<s.s20)
+      bullets.push({c:'#ef4444', t:'MA 역배열 하락 추세 — SMA20<SMA60 (데드크로스) + 현재가<SMA20. 중기 하락 추세 유효.'});
+    else if(cur>s.s20&&s.s20<s.s60)
+      bullets.push({c:'#f59e0b', t:'역배열 속 단기 반등 — SMA20<SMA60이나 현재가>SMA20. 반등이 추세 전환인지 확인 필요.'});
+    else
+      bullets.push({c:'#f59e0b', t:'정배열 속 단기 조정 — SMA20>SMA60이나 현재가<SMA20. 단기 눌림. SMA20 회복 여부 주목.'});
+  }
+
+  // 20일 방향성
+  if(n>=20){
+    var a=closes.slice(-20,n-10).reduce(function(s,x){return s+x;},0)/10;
+    var b=closes.slice(-10).reduce(function(s,x){return s+x;},0)/10;
+    if(b>a*1.03) bullets.push({c:'#22c55e', t:'최근 20일 가격 흐름 상승 — 전반(평균 '+fp(Math.round(a))+') → 후반(평균 '+fp(Math.round(b))+'). 단기 상승 압력.'});
+    else if(b<a*0.97) bullets.push({c:'#ef4444', t:'최근 20일 가격 흐름 하락 — 전반(평균 '+fp(Math.round(a))+') → 후반(평균 '+fp(Math.round(b))+'). 단기 하락 압력.'});
+    else bullets.push({c:'#6b7280', t:'최근 20일 가격 흐름 횡보 — 전반/후반 평균 유사. 방향 탐색 중.'});
+  }
+
+  // RSI 추세 맥락
+  if(rsi!==null){
+    if(rsi<30) bullets.push({c:'#22c55e', t:'RSI '+rsi+' 과매도 영역 — 단기 기술적 반등 확률 높음. 단, 강한 하락 추세 중엔 추가 하락 가능.'});
+    else if(rsi>70) bullets.push({c:'#ef4444', t:'RSI '+rsi+' 과매수 영역 — 단기 차익 실현 압력. 단, 강한 상승 추세 중엔 지속 상승 가능.'});
+    else if(rsi>=50) bullets.push({c:'#22c55e', t:'RSI '+rsi+' 중립 상방 — 매수세 약간 우위. 50 지지 여부가 추세 지속의 관건.'});
+    else bullets.push({c:'#f59e0b', t:'RSI '+rsi+' 중립 하방 — 매도세 약간 우위. 30 접근 시 과매도 반등 주시.'});
+  }
+
+  // MACD 모멘텀
+  if(mac){
+    if(mac.hist>0&&mac.line>0) bullets.push({c:'#22c55e', t:'MACD 양권 + 히스토그램 플러스 — 상승 모멘텀 확인. 히스토그램 확대 시 가속.'});
+    else if(mac.hist>0&&mac.line<0) bullets.push({c:'#22c55e', t:'MACD 히스토그램 개선 중 — 하락 모멘텀 약화, 반전 가능성 탐색.'});
+    else if(mac.hist<0&&mac.line>0) bullets.push({c:'#f59e0b', t:'MACD 히스토그램 감소 — 상승 모멘텀 약화 주의. 조정 가능성.'});
+    else bullets.push({c:'#ef4444', t:'MACD 음권 + 히스토그램 마이너스 — 하락 모멘텀 지속.'});
+  }
+
+  // 볼린저 밴드
+  if(bb){
+    var bw=Math.round((bb.upper-bb.lower)/bb.middle*100);
+    if(cur>=bb.upper*0.97) bullets.push({c:'#f59e0b', t:'볼린저 상단('+fp(Math.round(bb.upper))+') 근처 — 단기 과매수 또는 강한 상승 추세. 밴드 상단 돌파 시 추세 가속.'});
+    else if(cur<=bb.lower*1.03) bullets.push({c:'#22c55e', t:'볼린저 하단('+fp(Math.round(bb.lower))+') 근처 — 단기 과매도 또는 강한 하락. 반등 탐색 구간.'});
+    if(bw<8) bullets.push({c:'#f97316', t:'볼린저 밴드 폭 '+bw+'% 극도 수렴 — 큰 방향성 이탈 임박. 이탈 방향이 다음 추세.'});
+    else if(bw>25) bullets.push({c:'#6b7280', t:'볼린저 밴드 폭 '+bw+'% 확대 — 변동성 큼. 현재 추세 강함.'});
+  }
+
+  // 거래량
+  if(vol.cur&&vol.avg){
+    var vr=Math.round(vol.cur/vol.avg*10)/10;
+    if(vr>2) bullets.push({c:'#f59e0b', t:'거래량 급증 ('+vr+'배) — 수급 집중. 방향 확인 필수.'});
+    else if(vr<0.6) bullets.push({c:'#22c55e', t:'거래량 감소 ('+vr+'배) — 매도 압력 약화. 조정/눌림 구간에선 긍정적 신호.'});
+  }
+
+  return bullets;
+}
+
 // ══════════════════════════════════════
 // ── 보조지표 계산 함수 ──
 // ══════════════════════════════════════
@@ -540,8 +679,10 @@ function computeIndicators(cl,op,hi,lo,vo,p){
   var rsi=_rsi(cl,14), bb=_bb(cl,20,2), mac=_macd(cl,12,26,9), cdl=_candle(op,hi,lo,cl);
   var trend='sideways';
   if(s20&&s60){if(s20>s60&&p>s20)trend='up';else if(s20<s60&&p<s20)trend='down';}
+  var patterns=detectChartPatterns(cl,hi,lo);
   return {sma:{s5:s5,s20:s20,s60:s60,s120:s120}, rsi:rsi, bb:bb, macd:mac, candle:cdl,
-          vol:{cur:vo[vo.length-1]||0, avg:Math.round(avgVol)}, trend:trend};
+          vol:{cur:vo[vo.length-1]||0, avg:Math.round(avgVol)}, trend:trend,
+          patterns:patterns, closes:cl, highs:hi, lows:lo};
 }
 
 // ── 기술적 분석 HTML 빌더 ──
@@ -553,78 +694,117 @@ function _chip(lbl,val,col){
 function buildTechSection(ind, cur, fp){
   if(!ind) return '';
   var s=ind.sma, rsi=ind.rsi, bb=ind.bb, mac=ind.macd, cdl=ind.candle, vol=ind.vol;
-  var rsiC=rsi<30?'#22c55e':rsi>70?'#ef4444':'#f59e0b';
-  var rsiL=rsi<30?'과매도 (기술적 반등 신호)':rsi>70?'과매수 (단기 조정 주의)':rsi<50?'중립 — 하방 편향':'중립 — 상방 편향';
+  var patterns=ind.patterns||[];
+  var closes=ind.closes||[], highs=ind.highs||[], lows=ind.lows||[];
+  var rsiC=rsi!==null&&rsi!==undefined?(rsi<30?'#22c55e':rsi>70?'#ef4444':'#f59e0b'):'#6b7280';
+  var rsiL=rsi!==null&&rsi!==undefined?(rsi<30?'과매도 (기술적 반등 신호)':rsi>70?'과매수 (단기 조정 주의)':rsi<50?'중립 — 하방 편향':'중립 — 상방 편향'):'N/A';
+
+  // 추세 흐름 bullets
+  var trendBullets = buildTrendFlow(ind, closes, cur, fp);
+
   var html='<div style="margin-top:14px;background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:16px">';
-  html+='<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:14px">📊 보조지표 기술적 분석</div>';
-  // MA
+  html+='<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:14px">📊 기술적 분석 상세</div>';
+
+  // 1. 전체 추세 흐름
+  if(trendBullets.length){
+    html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
+    html+='<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:7px">📈 전체 추세 흐름</div>';
+    html+=trendBullets.map(function(b){
+      return '<div style="display:flex;gap:6px;align-items:flex-start;margin-bottom:5px">'
+      +'<span style="color:'+b.c+';font-size:13px;flex-shrink:0;margin-top:-1px">●</span>'
+      +'<span style="font-size:11px;color:var(--mt);line-height:1.6">'+b.t+'</span></div>';
+    }).join('');
+    html+='</div>';
+  }
+
+  // 2. 차트 패턴
+  if(patterns.length){
+    html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
+    html+='<div style="font-size:11px;font-weight:700;color:#f97316;margin-bottom:7px">🔍 차트 패턴 감지</div>';
+    patterns.forEach(function(pt){
+      var pc=pt.type==='bullish'?'#22c55e':pt.type==='bearish'?'#ef4444':'#6b7280';
+      html+='<div style="margin-bottom:8px;padding:10px 12px;background:'+pc+'0c;border-left:3px solid '+pc+';border-radius:0 8px 8px 0">';
+      html+='<div style="font-size:12px;font-weight:700;color:'+pc+';margin-bottom:3px">'+pt.name+'</div>';
+      html+='<div style="font-size:11px;color:var(--mt)">'+pt.desc+'</div>';
+      html+='</div>';
+    });
+    html+='</div>';
+  }
+
+  // 3. MA
   if(s.s20){
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
-    html+='<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:6px">📈 이동평균선 (Moving Average)</div>';
+    html+='<div style="font-size:11px;font-weight:700;color:#60a5fa;margin-bottom:6px">📈 이동평균선 (MA)</div>';
     html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:6px">';
-    if(s.s5)   html+=_chip('SMA 5', fp(Math.round(s.s5)),   cur>s.s5?'#22c55e':'#ef4444');
-    if(s.s20)  html+=_chip('SMA 20',fp(Math.round(s.s20)),  cur>s.s20?'#22c55e':'#ef4444');
-    if(s.s60)  html+=_chip('SMA 60',fp(Math.round(s.s60)),  cur>s.s60?'#22c55e':'#ef4444');
-    if(s.s120) html+=_chip('SMA 120',fp(Math.round(s.s120)),cur>s.s120?'#22c55e':'#ef4444');
-    html+='</div><div style="font-size:11px;color:var(--mt)">';
-    if(s.s20&&s.s60) html+='• '+(s.s20>s.s60?'<b style="color:#22c55e">골든크로스</b> 상태 (SMA20>SMA60 — 중기 상승 추세)':'<b style="color:#ef4444">데드크로스</b> 상태 (SMA20<SMA60 — 중기 하락 추세)')+'<br>';
-    if(s.s20) html+='• 현재가 SMA20 '+(cur>s.s20?'<b style="color:#22c55e">위</b> → 단기 상승 모멘텀':'<b style="color:#ef4444">아래</b> → 단기 조정 중');
+    if(s.s5)   html+=_chip('SMA5',  fp(Math.round(s.s5)),   cur>s.s5?'#22c55e':'#ef4444');
+    if(s.s20)  html+=_chip('SMA20', fp(Math.round(s.s20)),  cur>s.s20?'#22c55e':'#ef4444');
+    if(s.s60)  html+=_chip('SMA60', fp(Math.round(s.s60)),  cur>s.s60?'#22c55e':'#ef4444');
+    if(s.s120) html+=_chip('SMA120',fp(Math.round(s.s120)), cur>s.s120?'#22c55e':'#ef4444');
+    html+='</div>';
+    html+='<div style="font-size:11px;color:var(--mt)">';
+    if(s.s20&&s.s60) html+='• '+(s.s20>s.s60?'<b style="color:#22c55e">골든크로스</b> 상태':'<b style="color:#ef4444">데드크로스</b> 상태')
+      +' (SMA20 '+(s.s20>s.s60?'>':'<')+' SMA60)<br>';
+    if(s.s20) html+='• 현재가 SMA20 '+(cur>s.s20?'<b style="color:#22c55e">위</b> → 단기 상승':'<b style="color:#ef4444">아래</b> → 단기 조정');
     html+='</div></div>';
   }
-  // RSI
-  if(rsi!==null){
+
+  // 4. RSI
+  if(rsi!==null&&rsi!==undefined){
     var rsiBar=Math.min(Math.max(rsi,0),100);
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
-    html+='<div style="font-size:11px;font-weight:700;color:#a855f7;margin-bottom:6px">⚡ RSI (14일 상대강도지수)</div>';
+    html+='<div style="font-size:11px;font-weight:700;color:#a855f7;margin-bottom:6px">⚡ RSI (14일)</div>';
     html+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">';
     html+='<div style="font-size:24px;font-weight:900;color:'+rsiC+'">'+rsi+'</div>';
     html+='<div style="flex:1"><div style="height:7px;background:var(--s1);border-radius:3px;position:relative;overflow:hidden">';
     html+='<div style="position:absolute;inset:0;background:linear-gradient(to right,#22c55e 30%,#f59e0b 60%,#ef4444);opacity:.4"></div>';
     html+='<div style="position:absolute;top:0;left:'+rsiBar+'%;width:3px;height:100%;background:'+rsiC+';border-radius:2px;transform:translateX(-50%)"></div>';
-    html+='</div><div style="display:flex;justify-content:space-between;font-size:9px;color:#4b5563;margin-top:2px"><span>0</span><span>30 과매도</span><span>70 과매수</span><span>100</span></div></div></div>';
+    html+='</div><div style="display:flex;justify-content:space-between;font-size:9px;color:#4b5563;margin-top:2px"><span>0</span><span>30</span><span>50</span><span>70</span><span>100</span></div></div></div>';
     html+='<div style="font-size:11px;color:var(--mt)">• RSI '+rsi+' → <b style="color:'+rsiC+'">'+rsiL+'</b><br>';
-    if(rsi<30) html+='→ 과매도 영역 — 기술적 반등 가능성 높음. 단, 강한 하락 추세 중엔 추가 하락 가능';
-    else if(rsi>70) html+='→ 과매수 영역 — 단기 차익 실현 주의. 단, 강한 상승 추세 중엔 계속 상승 가능';
-    else html+='→ 방향 탐색 중. 구조론 기능선 신호와 함께 판단';
+    if(rsi<30) html+='→ 30 이하 과매도. 기술적 반등 확률 높음 (단, 강한 하락 추세 중엔 추가 하락 가능)';
+    else if(rsi>70) html+='→ 70 이상 과매수. 단기 조정 주의 (단, 강한 상승 추세 중엔 지속 가능)';
+    else html+='→ 구조론 기능선 신호와 함께 종합 판단';
     html+='</div></div>';
   }
-  // MACD
+
+  // 5. MACD
   if(mac){
     var mc=mac.hist>0?'#22c55e':'#ef4444';
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
     html+='<div style="font-size:11px;font-weight:700;color:#f59e0b;margin-bottom:6px">📊 MACD (12, 26, 9)</div>';
     html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:6px">';
-    html+=_chip('MACD',mac.line>0?'+'+mac.line:mac.line, mac.line>0?'#22c55e':'#ef4444');
-    html+=_chip('시그널',mac.signal>0?'+'+mac.signal:mac.signal,'#60a5fa');
-    html+=_chip('히스토그램',mac.hist>0?'+'+mac.hist:mac.hist,mc);
+    html+=_chip('MACD',    mac.line>0?'+'+mac.line:mac.line,   mac.line>0?'#22c55e':'#ef4444');
+    html+=_chip('시그널',  mac.signal>0?'+'+mac.signal:mac.signal, '#60a5fa');
+    html+=_chip('히스토그램', mac.hist>0?'+'+mac.hist:mac.hist, mc);
     html+='</div><div style="font-size:11px;color:var(--mt)">';
-    html+='• '+(mac.hist>0?'<b style="color:#22c55e">MACD > 시그널</b> → 매수 모멘텀 형성 중':'<b style="color:#ef4444">MACD < 시그널</b> → 매도 모멘텀 형성 중')+'<br>';
-    html+='• 히스토그램 절대값 '+(Math.abs(mac.hist)>Math.abs(mac.line)*0.15?'확대 → 모멘텀 가속 중':'축소 → 모멘텀 약화, 추세 전환 주의');
+    html+='• '+(mac.hist>0?'<b style="color:#22c55e">MACD > 시그널</b> → 매수 모멘텀':'<b style="color:#ef4444">MACD < 시그널</b> → 매도 모멘텀')+'<br>';
+    html+='• 히스토그램 '+( Math.abs(mac.hist)>Math.abs(mac.line)*0.15?'확대 → 모멘텀 가속':'축소 → 모멘텀 약화, 추세 전환 주의');
     html+='</div></div>';
   }
-  // Bollinger
+
+  // 6. 볼린저
   if(bb){
     var bpct=bb.upper-bb.lower>0?Math.round((cur-bb.lower)/(bb.upper-bb.lower)*100):50;
     var bw=Math.round((bb.upper-bb.lower)/bb.middle*100);
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
     html+='<div style="font-size:11px;font-weight:700;color:#06b6d4;margin-bottom:6px">📏 볼린저 밴드 (20일, ±2σ)</div>';
     html+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:6px">';
-    html+=_chip('상단',fp(Math.round(bb.upper)),'#ef4444');
-    html+=_chip('중선(SMA20)',fp(Math.round(bb.middle)),'#6b7280');
-    html+=_chip('하단',fp(Math.round(bb.lower)),'#22c55e');
+    html+=_chip('상단',      fp(Math.round(bb.upper)),  '#ef4444');
+    html+=_chip('중선(SMA20)',fp(Math.round(bb.middle)), '#6b7280');
+    html+=_chip('하단',      fp(Math.round(bb.lower)),  '#22c55e');
     html+='</div>';
     html+='<div style="height:7px;background:linear-gradient(to right,#22c55e,#6b7280,#ef4444);border-radius:3px;position:relative;margin-bottom:5px">';
     html+='<div style="position:absolute;top:-2px;left:'+Math.min(Math.max(bpct,1),99)+'%;width:5px;height:11px;background:#fff;border-radius:2px;transform:translateX(-50%)"></div>';
     html+='</div>';
     html+='<div style="font-size:11px;color:var(--mt)">';
     if(cur>=bb.upper*0.97) html+='• 밴드 상단 근처 → 과매수 또는 강한 상승. 단기 조정 주의<br>';
-    else if(cur<=bb.lower*1.03) html+='• 밴드 하단 근처 → 과매도 또는 강한 하락. 반등 탐색 구간<br>';
-    else if(cur>bb.middle) html+='• 중선 위 — 상승 편향. 상단까지 추가 여지<br>';
-    else html+='• 중선 아래 — 하락 편향. 하단까지 주의<br>';
-    html+='• 밴드 폭 '+bw+'% '+(bw>15?'(확대 — 추세 강함, 변동성 큼)':'(수렴 — 방향 탐색 중, 이탈 후 큰 움직임 예상)');
+    else if(cur<=bb.lower*1.03) html+='• 밴드 하단 근처 → 과매도 또는 강한 하락. 반등 탐색<br>';
+    else if(cur>bb.middle) html+='• 중선 위 — 상승 편향<br>';
+    else html+='• 중선 아래 — 하락 편향<br>';
+    html+='• 밴드 폭 '+bw+'% '+(bw<8?'<b style="color:#f97316">극도 수렴 → 큰 이탈 임박</b>':bw<15?'수렴 → 방향 탐색 중':'확대 → 추세 강함, 변동성 큼');
     html+='</div></div>';
   }
-  // Candle
+
+  // 7. 캔들 패턴
   if(cdl&&cdl.name!=='봉 데이터 부족'){
     var cc=cdl.sentiment==='bullish'?'#22c55e':cdl.sentiment==='bearish'?'#ef4444':'#6b7280';
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
@@ -632,34 +812,36 @@ function buildTechSection(ind, cur, fp){
     html+='<div style="margin-bottom:4px"><span style="padding:3px 10px;background:'+cc+'18;border:1px solid '+cc+'44;border-radius:10px;font-size:12px;font-weight:700;color:'+cc+'">'+cdl.name+'</span></div>';
     html+='<div style="font-size:11px;color:var(--mt)">• '+cdl.desc+'</div></div>';
   }
-  // Volume
-  if(vol.avg&&vol.cur){
+
+  // 8. 거래량
+  if(vol.cur&&vol.avg){
     var vr=Math.round(vol.cur/vol.avg*10)/10;
     var vc=vr>2?'#f59e0b':vr>1.2?'#22c55e':'#6b7280';
     html+='<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid rgba(255,255,255,.05)">';
     html+='<div style="font-size:11px;font-weight:700;color:#84cc16;margin-bottom:6px">📊 거래량</div>';
     html+='<div style="font-size:11px;color:var(--mt)">• 평균 대비 <b style="color:'+vc+'">'+vr+'배</b><br>';
-    if(vr>2) html+='→ 거래량 급증 — 수급 집중. 방향 확인 중요';
-    else if(vr>1.2) html+='→ 거래량 증가 — 참여자 늘어남. 추세 신뢰도 상승';
-    else if(vr<0.7) html+='→ 거래량 감소 — 참여자 관망. 눌림·반등 구간에선 긍정적';
-    else html+='→ 거래량 보통 — 추세 방향 확인 필요';
+    if(vr>2) html+='→ 거래량 급증 — 수급 집중. 방향 확인 필수';
+    else if(vr>1.2) html+='→ 거래량 증가 — 참여자 증가. 추세 신뢰도 상승';
+    else if(vr<0.6) html+='→ 거래량 감소 — 매도 압력 약화. 눌림·반등 구간에선 긍정적';
+    else html+='→ 거래량 보통 — 방향 확인 필요';
     html+='</div></div>';
   }
-  // Summary
-  html+='<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:5px">💡 보조지표 종합</div>';
+
+  // 9. 종합 의견
   var sum=[];
-  if(ind.trend==='up') sum.push('MA 정배열 → 중기 상승 추세');
-  else if(ind.trend==='down') sum.push('MA 역배열 → 중기 하락 추세');
-  else sum.push('MA 혼조 → 방향 탐색');
-  if(rsi!==null) sum.push('RSI '+rsi+' '+rsiL.split('(')[0].trim());
+  if(ind.trend==='up') sum.push('MA 정배열 상승 추세');
+  else if(ind.trend==='down') sum.push('MA 역배열 하락 추세');
+  else sum.push('MA 혼조 (방향 탐색)');
+  if(rsi!==null&&rsi!==undefined) sum.push('RSI '+rsi+' '+rsiL.split('(')[0].trim());
   if(mac) sum.push('MACD '+(mac.hist>0?'매수':'매도')+' 모멘텀');
-  if(bb) sum.push('BB '+(cur>bb.middle?'상단 방향':'하단 방향'));
-  if(cdl) sum.push('캔들: '+cdl.name.split(' ')[0]);
+  if(bb) sum.push('BB '+(cur>bb.middle?'상단':'하단')+' 편향');
+  if(cdl&&cdl.name) sum.push('캔들: '+cdl.name.split(' ')[0]);
+  if(patterns.length) sum.push('패턴: '+patterns.map(function(p){return p.name.split(' ')[0];}).join(', '));
+  html+='<div style="font-size:11px;font-weight:700;color:var(--mt);margin-bottom:5px">💡 보조지표 종합 의견</div>';
   html+='<div style="font-size:11px;color:var(--mt)">'+sum.map(function(x){return '• '+x;}).join('<br>')+'</div>';
   html+='</div>';
   return html;
 }
-
 // ══════════════════════════════════════
 // ── 분석 엔진 ──
 // ══════════════════════════════════════
@@ -834,63 +1016,120 @@ function generateAnalysis(d){
   if(ec){ (p>=ec ? supportC : resistC).push('사건봉 종가 '+fp(ec)+'(대량거래 합의)'); }
 
   // ── 진입/손절/익절 가격 추출 ──
+  var ind = d.indicators || {};
+  var _indS = ind.sma || {}, _indRsi = ind.rsi, _indMac = ind.macd, _indBb = ind.bb;
+  var indTxt = []; // 보조지표 매수/매도 근거 텍스트
+
+  // 보조지표 신호 수집
+  if(_indRsi!==null&&_indRsi!==undefined){
+    if(_indRsi<35) indTxt.push('RSI '+_indRsi+' 과매도 → 기술적 반등 신호');
+    else if(_indRsi>65) indTxt.push('RSI '+_indRsi+' 과매수 → 단기 조정 신호');
+  }
+  if(_indMac){ if(_indMac.hist>0) indTxt.push('MACD 히스토그램 플러스 → 매수 모멘텀'); else indTxt.push('MACD 히스토그램 마이너스 → 매도 모멘텀'); }
+  if(_indBb){ if(d.currentPrice<=_indBb.lower*1.02) indTxt.push('볼린저 하단 근처 → 과매도'); else if(d.currentPrice>=_indBb.upper*0.98) indTxt.push('볼린저 상단 근처 → 과매수'); }
+  if(_indS.s20){ if(d.currentPrice>_indS.s20) indTxt.push('현재가>SMA20 → 단기 상승'); else indTxt.push('현재가<SMA20 → 단기 하락'); }
+
+  var _rnd2 = function(v){ return Math.round(v*100)/100; };
   var e1p=0,e1r='', e2p=0,e2r='', slp=0,slr='', t1p=0,t1r='', t2r='';
   var isBuyA = finalJudge.includes('매수') || finalJudge.indexOf('눌림')>-1;
+  var _slBuf = 0.985; // 손절 버퍼 1.5% (2차 매수가와 구분)
+  var _slBufS = 1.015; // 매도 손절 버퍼 (위로)
+
   if(hasDoji){
     if(p>=dl && p<=du){
       if(p<=dc){
-        e1p=dc; e1r='도지 종가 = 압축된 전장의 합의가격. 많은 참여자가 이 가격에서 포지션 형성 → 매수세 재유입 가능성 높음';
-        e2p=dl; e2r='도지 하단 = 매수세가 강하게 반응했던 경계선. 이 근처에서 추가 매수세 유입 예상';
-        slp=dl; slr='도지 하단 종가 이탈 → 지지가 저항으로 전환. 진입 근거(도지 내부 지지) 완전 소멸 → 즉시 손절, 새 이유 금지';
-        t1p=du; t1r='도지 상단 = 매도세 경계. 종가 돌파 실패 시 1차 익절, 돌파 성공 시 다음 기능선까지 보유';
-        t2r='도지 상단 종가 돌파 후 → 다음 기능선(외부 저항)까지 추가 보유';
+        e1p=dc;
+        e1r='도지 종가('+fp(dc)+') = 압축된 전장의 합의가격. 다수 참여자가 이 가격에서 포지션 형성 → 하단 눌림 시 매수세 재유입 가능성 높음.'
+          +(indTxt.length?' 보조지표 신호: '+indTxt.join(' / '):'');
+        e2p=dl;
+        e2r='도지 하단('+fp(dl)+') = 매수세가 강하게 반응했던 경계선. 이 가격까지 내려오면 매수세 강하게 반응할 가능성 높음. 1차보다 더 유리한 가격 진입.';
+        slp=_rnd2(dl*_slBuf);
+        slr='도지 하단('+fp(dl)+') 종가 기준 이탈 시 → 지지가 저항으로 전환. 진입 근거(도지 내부 지지) 완전 소멸. 즉시 손절('+fp(slp)+', 하단 -1.5% 기준), 새 이유 붙이기 금지.';
+        t1p=du; t1r='도지 상단('+fp(du)+') = 매도세 경계. 종가 돌파 실패 시 1차 익절. 돌파 성공 시 다음 기능선까지 보유.';
+        t2r='도지 상단 종가 돌파 후 다음 외부 저항 기능선까지 추가 보유';
       } else {
-        e1p=du; e1r='도지 상단 = 매도세가 강하게 반응한 경계선. 이 가격에서 매도 압력 재유입 가능성 높음';
-        e2p=dc; e2r='도지 종가 = 내부 균형점. 상단 돌파 없을 시 2차 매도 타점';
-        slp=du; slr='도지 상단 종가 돌파 → 저항이 지지로 전환. 진입 근거(도지 내부 매도) 소멸 → 즉시 손절';
-        t1p=dc; t1r='도지 종가(균형점) 이탈 시 1차 익절';
-        t2r=fp(dl)+' 도지 하단 → 2차 목표';
+        e1p=du;
+        e1r='도지 상단('+fp(du)+') = 매도세가 강하게 반응한 경계선. 이 근처에서 매도 압력 재유입 가능성 높음.'
+          +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+        e2p=dc;
+        e2r='도지 종가('+fp(dc)+') = 내부 균형점. 상단 돌파 없을 시 2차 매도 타점. 1차보다 더 유리한 가격 진입 가능.';
+        slp=_rnd2(du*_slBufS);
+        slr='도지 상단('+fp(du)+') 종가 기준 돌파 시 → 저항이 지지로 전환. 진입 근거(도지 내부 매도) 소멸. 즉시 손절('+fp(slp)+', 상단 +1.5% 기준).';
+        t1p=dc; t1r='도지 종가('+fp(dc)+') 이탈 시 1차 익절.';
+        t2r=fp(dl)+' 도지 하단 도달 시 2차 익절';
       }
     } else if(p>du){
-      e1p=du; e1r='도지 상단이 저항→지지로 전환된 가격. 과거 매도 압력이 있던 자리 → 돌파 후 지지로 기억됨. 1차 리테스트 타점';
-      e2p=dc; e2r='도지 종가(합의가격). 상단이 무너질 경우 이 가격까지 추가 조정 → 2차 매수 타점';
-      slp=dl; slr='도지 하단 종가 이탈 → 도지 구조 완전 붕괴. 상방 돌파 논리 소멸 → 즉시 전량 손절';
-      t1r='직전 고점 또는 다음 저항 기능선 (종가 기준 돌파 실패 시 1차 익절)';
+      e1p=du;
+      e1r='도지 상단('+fp(du)+')이 저항→지지로 전환. 과거 매도 압력이 있던 자리가 돌파 후 지지로 기억됨 → 리테스트 1차 매수 타점.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=dc;
+      e2r='도지 종가('+fp(dc)+') = 도지 합의가격. 도지 상단 지지가 무너질 경우 이 가격까지 추가 조정 → 더 유리한 2차 매수 타점.';
+      slp=_rnd2(dl*_slBuf);
+      slr='도지 하단('+fp(dl)+') 아래('+fp(slp)+') 종가 이탈 시 → 도지 구조 완전 붕괴. 상방 돌파 논리 소멸 → 즉시 전량 손절.';
+      t1r='직전 고점 또는 다음 저항 기능선 — 종가 돌파 실패 시 1차 익절';
       t2r='추세 가속 후 다음 기능선까지 보유';
     } else {
-      e1p=dl; e1r='도지 하단이 지지→저항으로 전환된 가격. 과거 매수세가 있던 자리 → 이탈 후 저항으로 기억됨. 1차 리테스트 타점';
-      e2p=dc; e2r='도지 종가(합의가격). 하단이 돌파될 경우 이 가격까지 추가 반등 → 2차 매도 타점';
-      slp=du; slr='도지 상단 종가 돌파 → 도지 구조 완전 붕괴. 하방 이탈 논리 소멸 → 즉시 전량 손절';
-      t1r='직전 저점 또는 다음 지지 기능선 (종가 기준 이탈 실패 시 1차 익절)';
+      e1p=dl;
+      e1r='도지 하단('+fp(dl)+')이 지지→저항으로 전환. 과거 매수세가 있던 자리가 이탈 후 저항으로 기억됨 → 리테스트 1차 매도 타점.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=dc;
+      e2r='도지 종가('+fp(dc)+') = 도지 합의가격. 도지 하단 저항이 돌파될 경우 이 가격까지 추가 반등 → 더 유리한 2차 매도 타점.';
+      slp=_rnd2(du*_slBufS);
+      slr='도지 상단('+fp(du)+') 위('+fp(slp)+') 종가 돌파 시 → 도지 구조 완전 붕괴. 하방 이탈 논리 소멸 → 즉시 전량 손절.';
+      t1r='직전 저점 또는 다음 지지 기능선 — 종가 이탈 실패 시 1차 익절';
       t2r='추세 하락 가속 후 다음 기능선까지 보유';
     }
   } else if(hasBox){
     if(p>=bl && p<=bc){
-      e1p=bc; e1r='박스 내 다수 종가가 집중된 합의가격대 — 많은 참여자의 평균 매수 가격. 이 근처에서 매수세 재유입 가능성 높음';
-      e2p=bl; e2r='박스 하단 = 매수세와 매도세의 경계선 — 이 가격에서 강한 매수 반응 예상. 하단에 가까울수록 유리한 진입';
-      slp=bl; slr='박스 하단 종가 이탈 → 지지가 저항으로 전환. 진입 근거(박스 하단 매수) 완전 소멸 → 즉시 손절, 새 이유 붙이기 금지';
-      t1p=bu; t1r='박스 상단 = 매도세 우위 구간. 종가 기준 돌파 실패 시 1차 익절. 돌파 성공 시 다음 기능선까지 보유';
-      t2r='박스 상단 종가 돌파 후 → 추세매매로 전환, 다음 저항 기능선까지 보유';
+      e1p=bc;
+      e1r='박스 종가 클러스터('+fp(bc)+') = 박스 내 다수 종가가 집중된 합의가격대. 많은 참여자의 평균 매수가 → 매수세 재유입 가능성 높음.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=bl;
+      e2r='박스 하단('+fp(bl)+') = 매수세와 매도세가 균형을 이루는 경계선. 이 가격에서 과거 강한 매수 반응 → 더 유리한 진입. 분할 매수 원칙 적용.';
+      slp=_rnd2(bl*_slBuf);
+      slr='박스 하단('+fp(bl)+') 종가 이탈 시(실제 손절: '+fp(slp)+') → 지지가 저항으로 전환. 진입 근거(박스 하단 매수) 완전 소멸 → 즉시 손절. 새 이유 붙이기 절대 금지.';
+      t1p=bu; t1r='박스 상단('+fp(bu)+') = 매도세 우위 구간. 종가 기준 돌파 실패 시 1차 익절, 돌파 성공 시 다음 기능선까지 보유.';
+      t2r='박스 상단 종가 돌파 후 추세매매로 전환, 다음 저항 기능선까지 보유';
     } else if(p>bc&&p<=bu){
-      e1p=bu; e1r='박스 상단 = 매도세가 집중된 구간. 이 근처에서 강한 매도 압력 예상. 1차 매도 타점';
-      e2p=bc; e2r='박스 종가(균형점) = 상단 돌파 없을 시 2차 매도 타점. 매수·매도 균형이 깨지는 가격';
-      slp=bu; slr='박스 상단 종가 돌파 → 저항이 지지로 전환. 진입 근거(박스 상단 저항) 소멸 → 즉시 손절';
-      t1p=bc; t1r='박스 종가(균형점) 이탈 시 1차 익절';
-      t2r=fp(bl)+' 박스 하단 → 2차 목표';
+      e1p=bu;
+      e1r='박스 상단('+fp(bu)+') = 과거 강한 매도 압력이 집중된 저항 구간. 이 근처에서 매도세 재유입 가능성 높음.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=bc;
+      e2r='박스 종가('+fp(bc)+') = 균형점. 상단 돌파 없을 시 2차 매도 타점. 1차보다 더 유리한 진입.';
+      slp=_rnd2(bu*_slBufS);
+      slr='박스 상단('+fp(bu)+') 종가 돌파 시(실제 손절: '+fp(slp)+') → 저항이 지지로 전환. 진입 근거 소멸 → 즉시 손절.';
+      t1p=bc; t1r='박스 종가('+fp(bc)+') 이탈 시 1차 익절.';
+      t2r=fp(bl)+' 박스 하단 도달 시 2차 익절';
     } else if(p>bu){
-      e1p=bu; e1r='박스 상단이 저항→지지로 전환된 가격. 과거 매도 압력이 있던 자리 → 돌파 후 지지로 기억. 눌림매매 1차 타점';
-      e2p=bc; e2r='박스 종가(합의가격). 상단 지지가 무너질 경우 이 가격까지 추가 조정 → 2차 매수 타점';
-      slp=bc; slr='박스 종가 종가 이탈 → 눌림 실패. 박스 내부 복귀 → 진입 근거(눌림 지지) 소멸 → 즉시 손절';
-      t1r='이전 고점 또는 다음 저항 기능선 (종가 돌파 실패 시 1차 익절)';
+      e1p=bu;
+      e1r='박스 상단('+fp(bu)+')이 저항→지지로 전환. 과거 매도 압력이 있던 자리 → 돌파 후 매수세의 기억. 눌림매매 1차 타점.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=bc;
+      e2r='박스 종가('+fp(bc)+') = 박스 합의가격. 상단 지지가 무너질 경우 이 가격까지 추가 조정 → 더 유리한 2차 매수 타점.';
+      slp=_rnd2(bc*_slBuf);
+      slr='박스 종가('+fp(bc)+') 아래('+fp(slp)+') 종가 이탈 시 → 눌림 실패, 박스 내부 복귀. 진입 근거 소멸 → 즉시 손절.';
+      t1r='직전 고점 또는 다음 저항 기능선 — 종가 돌파 실패 시 1차 익절';
       t2r='추세 가속 후 다음 기능선까지 보유';
     } else {
-      e1p=bl; e1r='박스 하단이 지지→저항으로 전환된 가격. 과거 매수세가 있던 자리 → 이탈 후 저항으로 기억. 되돌림 매도 1차 타점';
-      e2p=bc; e2r='박스 종가(합의가격). 하단 저항이 돌파될 경우 이 가격까지 추가 반등 → 2차 매도 타점';
-      slp=bc; slr='박스 종가 종가 돌파 → 되돌림 실패. 박스 내부 복귀 → 진입 근거(되돌림 저항) 소멸 → 즉시 손절';
-      t1r='이전 저점 또는 다음 지지 기능선 (종가 이탈 실패 시 1차 익절)';
+      e1p=bl;
+      e1r='박스 하단('+fp(bl)+')이 지지→저항으로 전환. 과거 매수세가 있던 자리 → 이탈 후 매도세의 기억. 되돌림 매도 1차 타점.'
+        +(indTxt.length?' 보조지표: '+indTxt.join(' / '):'');
+      e2p=bc;
+      e2r='박스 종가('+fp(bc)+') = 박스 합의가격. 하단 저항 돌파될 경우 이 가격까지 추가 반등 → 더 유리한 2차 매도 타점.';
+      slp=_rnd2(bc*_slBufS);
+      slr='박스 종가('+fp(bc)+') 위('+fp(slp)+') 종가 돌파 시 → 되돌림 실패, 박스 내부 복귀. 진입 근거 소멸 → 즉시 손절.';
+      t1r='직전 저점 또는 다음 지지 기능선 — 종가 이탈 실패 시 1차 익절';
       t2r='추세 하락 가속 후 다음 기능선까지 보유';
     }
   }
+
+  // ── 수익률 계산 ──
+  var e1sl1  = e1p&&slp ? _pct(e1p,slp)  : '';
+  var e2sl1  = e2p&&slp ? _pct(e2p,slp)  : '';
+  var e1tgt1 = e1p&&t1p ? _pct(e1p,t1p)  : '';
+  var e2tgt1 = e2p&&t1p ? _pct(e2p,t1p)  : '';
+  var rr1    = e1p&&slp&&t1p ? _rr(e1p,slp,t1p) : '';
+  var rr2    = e2p&&slp&&t1p ? _rr(e2p,slp,t1p) : '';
 
   // ── 출력 빌더 ──
   var color  = finalJudge.includes('매수')?'#22c55e':finalJudge.includes('매도')?'#ef4444':'#f59e0b';
@@ -907,14 +1146,15 @@ function generateAnalysis(d){
   if(ec) fLines.push(fp(ec)+' (사건봉 종가)');
 
   // ── 진입/손절/익절 카드 빌더 ──
-  function priceCard(label, price, reason, col){
+  function priceCard(label, price, reason, col, pct, rr){
     var bgMap={buy:'rgba(34,197,94,.1)',sell:'rgba(239,68,68,.1)',stop:'rgba(239,68,68,.07)',target:'rgba(59,130,246,.1)',wait:'rgba(245,158,11,.1)'};
     var borderMap={buy:'#22c55e',sell:'#ef4444',stop:'#ef4444',target:'#3b82f6',wait:'#f59e0b'};
     var textMap={buy:'#22c55e',sell:'#ef4444',stop:'#ef4444',target:'#60a5fa',wait:'#f59e0b'};
     return '<div style="background:'+bgMap[col]+';border:1.5px solid '+borderMap[col]+';border-radius:10px;padding:12px;text-align:center;min-width:0">'
-    +'<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:'+textMap[col]+';margin-bottom:5px">'+label+'</div>'
-    +'<div style="font-size:'+(price&&price.toString().length<10?'17':'13')+'px;font-weight:900;color:var(--tx);margin-bottom:6px;word-break:break-all">'+( price ? fp(price) : '—' )+'</div>'
-    +'<div style="font-size:10px;color:#6b7280;line-height:1.4">'+reason+'</div>'
+    +'<div style="font-size:10px;font-weight:800;letter-spacing:.5px;color:'+textMap[col]+';margin-bottom:4px">'+label+'</div>'
+    +'<div style="font-size:'+(price&&price.toString().length<10?'16':'13')+'px;font-weight:900;color:var(--tx);margin-bottom:3px;word-break:break-all">'+( price ? fp(price) : '—' )+'</div>'
+    +(pct?'<div style="font-size:11px;font-weight:700;color:'+textMap[col]+'">'+pct+(rr?' <span style="color:#6b7280;font-weight:400">R:R '+rr+'</span>':'')+'</div>':'')
+    +'<div style="font-size:10px;color:#6b7280;line-height:1.4;margin-top:3px">'+reason+'</div>'
     +'</div>';
   }
 
@@ -925,12 +1165,12 @@ function generateAnalysis(d){
   var priceSummary = '<div style="margin-bottom:14px">'
   +'<div style="font-size:12px;font-weight:700;color:var(--mt);margin-bottom:8px;letter-spacing:.3px">💰 매매 핵심 요약</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">'
-  + priceCard(eLabel1, e1p||0, e1r||'(리테스트 대기 후 확인)', eType)
-  + priceCard(eLabel2, e2p||0, e2r||'(추가 조정·반등 시)', eType)
+  + priceCard(eLabel1, e1p||0, '→ 손절 '+e1sl1+'  익절 '+e1tgt1, eType, e1sl1, rr1)
+  + priceCard(eLabel2, e2p||0, '→ 손절 '+e2sl1+'  익절 '+e2tgt1, eType, e2sl1, rr2)
   +'</div>'
   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-  + priceCard('⛔ 손절가', slp||0, slr||'기능선 종가 이탈 시', 'stop')
-  + priceCard(isBuyA?'🎯 1차 익절':'🎯 1차 목표', t1p||0, t1r||'다음 기능선 도달', 'target')
+  + priceCard('⛔ 손절가 (종가기준)', slp||0, '기능선 종가 이탈 시 즉시 손절', 'stop', e1p&&slp?_pct(slp,e1p):'')
+  + priceCard(isBuyA?'🎯 1차 익절':'🎯 1차 목표', t1p||0, t1r||'다음 기능선 도달', 'target', e1p&&t1p?_pct(e1p,t1p):'')
   +'</div>'
   +(t2r?'<div style="margin-top:6px;padding:8px 12px;background:rgba(59,130,246,.06);border-radius:6px;font-size:11px;color:var(--mt)">2차 목표: '+t2r+'</div>':'')
   +'</div>';
