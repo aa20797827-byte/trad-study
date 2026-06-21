@@ -262,10 +262,25 @@ function _ctHideSuggest(){
 }
 
 window._ctSelectSym = function(code){
+  // 입력창 업데이트
   var inp=document.getElementById('ct-sym-input');
   if(inp) inp.value=code;
   _ctHideSuggest();
-  window._ctChangeSymbol();
+
+  // 코드를 직접 처리 (입력창 재조회 불필요)
+  var tvSym = /^\d+$/.test(code) ? 'KRX:'+code : code.toUpperCase();
+  _ctSymbol = tvSym;
+  _tvLoaded = false;
+
+  var intSel=document.getElementById('ct-int-select');
+  if(intSel) _ctInterval=intSel.value;
+
+  var box=document.getElementById('ct-tv-box');
+  if(box) box.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">⏳ KRX:'+code+' 차트 로딩 중...</div>';
+
+  setTimeout(function(){ initTV(); _tvLoaded=true; }, 50);
+  window._ctAutoFill(tvSym);
+  window._ctAutoAnalyze(tvSym);
 };
 
 // 외부 클릭 시 드롭다운 닫기
