@@ -15,8 +15,11 @@ window.showChart = function(){
   _tvLoaded = false;
   wrap.innerHTML = buildCSS() + buildHero() + buildTabBar() + buildTabContent();
   window._ctSwitchTab('chart');
-  // 기본 종목 자동 데이터 로드
-  setTimeout(function(){ window._ctAutoFill(_ctSymbol); }, 600);
+  // 기본 종목 자동 분석 실행
+  setTimeout(function(){
+    window._ctAutoFill(_ctSymbol);
+    window._ctAutoAnalyze(_ctSymbol);
+  }, 600);
 };
 
 // ── 탭 전환 ──
@@ -59,8 +62,9 @@ window._ctChangeSymbol = function(){
   var box = document.getElementById('ct-tv-box');
   if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">차트 로딩 중...</div>';
   setTimeout(function(){ initTV(); _tvLoaded=true; }, 50);
-  // 차트 데이터 자동 로드
+  // 폼 자동 채우기 시도 + 자동 분석 실행
   window._ctAutoFill(sym);
+  window._ctAutoAnalyze(sym);
 };
 
 // ══════════════════════════════════════
@@ -555,17 +559,32 @@ function parseStooqCSV(csv){
 
 // ── 분석 결과 표시 공통 함수 ──
 function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, currency, name, source){
-  var aData = computeAutoAnalysis(closes, opens, highs, lows, vols, curPrice);
-  aData.currency = currency;
-  aData.note = name+' | '+ticker+' | 일봉 자동 감지 ('+(source||'Yahoo Finance')+')';
-  var newsPromise = fetchNews(ticker);
-  var html = buildDetectedBadge(aData, curPrice, currency, name) + generateAnalysis(aData);
-  out.innerHTML = html + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
-  fillForm(aData);
-  newsPromise.then(function(news){
-    var el=document.getElementById('ct-news-area');
-    if(el) el.innerHTML = buildNewsCard(news);
-  });
+  try {
+    var aData = computeAutoAnalysis(closes, opens, highs, lows, vols, curPrice);
+    aData.currency = currency;
+    aData.note = name+' | '+source;
+
+    var badge = '';
+    try { badge = buildDetectedBadge(aData, curPrice, currency, name); } catch(_){}
+
+    var analysis = '';
+    try { analysis = generateAnalysis(aData); } catch(e){ analysis = '<div style="padding:12px;color:#f59e0b;font-size:12px">분석 렌더링 오류: '+e.message+'</div>'; }
+
+    var techSection = '';
+    try { techSection = buildTechSection(aData.indicators, curPrice, function(v){ return formatPrice(v, currency); }); } catch(_){}
+
+    out.innerHTML = badge + analysis + techSection
+      + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
+
+    try { fillForm(aData); } catch(_){}
+
+    fetchNews(ticker).then(function(news){
+      var el=document.getElementById('ct-news-area');
+      if(el) el.innerHTML = buildNewsCard(news);
+    }).catch(function(){});
+  } catch(e){
+    out.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:13px">표시 오류: '+e.message+'</div>';
+  }
 }
 
 // 자동 분석 메인 함수
@@ -2271,7 +2290,9 @@ function buildChartPane(){
   +'<button onclick="window._ctChartAnalyze()" style="width:100%;padding:14px;background:var(--ac);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:800;cursor:pointer;letter-spacing:-.2px">📊 차트 분석 실행</button>'
   +'</div>'
 
-  // 분석 결과
+  // 자동 분석 결과 (종목 입력 시 자동)
+  +'<div id="ct-auto-output" style="margin-top:4px"></div>'
+  // 수동 분석 결과 (버튼 클릭 시)
   +'<div id="ct-chart-result" style="margin-top:4px"></div>'
   +'</div>';
 }
