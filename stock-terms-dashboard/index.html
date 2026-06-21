@@ -918,22 +918,30 @@ body.light .warnbox{background:rgba(245,158,11,.06);color:#92400e;}
 </div>
 
 <!-- ── 차트 분석 독립 버튼 ── -->
-<div id="cab" onclick="setMode('chart')" role="button" style="
-  display:flex;align-items:center;gap:16px;padding:14px 24px;
-  background:linear-gradient(135deg,#0f2340 0%,#0a1628 100%);
-  border-bottom:2px solid #1e3a5f;cursor:pointer;transition:all .2s;
-  user-select:none;-webkit-user-select:none;">
-  <div style="font-size:30px;flex-shrink:0;line-height:1">📊</div>
-  <div style="flex:1;min-width:0">
-    <div style="font-size:15px;font-weight:800;color:#e2e8f0;letter-spacing:-.2px">차트 분석</div>
-    <div style="font-size:11px;color:#4b7ab0;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">종목 입력 → 자동 기술적 분석 · 구조론 시나리오 · TradingView 연동</div>
-  </div>
-  <div style="font-size:11px;color:#3b82f6;flex-shrink:0;font-weight:700;letter-spacing:.5px">OPEN ▶</div>
+<div style="padding:12px 20px;background:var(--s1);border-bottom:1px solid var(--bd)">
+  <button id="cab" onclick="setMode('chart')" style="
+    display:flex;align-items:center;gap:16px;width:100%;
+    padding:16px 22px;border:none;border-radius:14px;cursor:pointer;
+    background:linear-gradient(135deg,#1d4ed8 0%,#2563eb 100%);
+    box-shadow:0 4px 16px rgba(37,99,235,.4);
+    transition:all .22s;text-align:left;user-select:none;">
+    <div style="width:46px;height:46px;border-radius:12px;background:rgba(255,255,255,.18);
+      display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📊</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:16px;font-weight:800;color:#fff;letter-spacing:-.3px">차트 분석</div>
+      <div style="font-size:11px;color:rgba(255,255,255,.7);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        종목 입력 → 자동 기술적 분석 · 구조론 시나리오 · TradingView 연동</div>
+    </div>
+    <div style="width:32px;height:32px;border-radius:50%;background:rgba(255,255,255,.2);
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;color:#fff">▶</div>
+  </button>
 </div>
 <style>
-#cab:hover{background:linear-gradient(135deg,#172e52,#0e1f3a)!important;border-color:#2d5a9e!important;}
-#cab.on{background:linear-gradient(135deg,#1e3a8a,#1e40af)!important;border-color:#3b82f6!important;}
-#cab.on>div:last-child{color:#93c5fd!important;}
+#cab:hover{background:linear-gradient(135deg,#1e40af,#1d4ed8)!important;
+  box-shadow:0 6px 22px rgba(37,99,235,.55)!important;transform:translateY(-1px);}
+#cab:active{transform:translateY(0)!important;}
+#cab.on{background:linear-gradient(135deg,#1e3a8a,#1e40af)!important;
+  box-shadow:0 0 0 3px #3b82f6,0 4px 16px rgba(30,58,138,.6)!important;}
 </style>
 
 <div class="main" id="main">
