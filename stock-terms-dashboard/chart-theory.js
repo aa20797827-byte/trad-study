@@ -2122,6 +2122,13 @@ function generateAnalysis(d){
     +'</div>';
   }
 
+  // 근거 텍스트 렌더링 헬퍼 (\n → <br>, 지표 근거 파란색 강조)
+  function renderReason(txt){
+    if(!txt) return '';
+    return txt.replace(/\n→ ([^:]+:)/g, function(_,g){ return '<br><span style="color:#60a5fa;font-size:10px;font-weight:700">→ '+g+'</span>'; })
+      .replace(/\n/g,'<br>');
+  }
+
   var priceSummary =
   '<div style="margin-bottom:16px;border-radius:14px;overflow:hidden;border:1px solid var(--bd)">'
   // 헤더
@@ -2130,12 +2137,6 @@ function generateAnalysis(d){
   +'<div style="font-size:12px;font-weight:700;color:#6b7280">가격</div>'
   +'<div style="font-size:12px;font-weight:700;color:#6b7280;text-align:right">기준 대비</div>'
   +'</div>'
-  // 헬퍼: 근거 텍스트 렌더링 (\n → <br>, 지표 근거 강조)
-  function renderReason(txt){
-    if(!txt) return '';
-    return txt.replace(/\n→ ([^:]+:)/g, function(_,g){ return '<br><span style="color:#60a5fa;font-size:10px;font-weight:700">→ '+g+'</span>'; })
-      .replace(/\n/g,'<br>');
-  }
   // 1차 진입
   +'<div style="display:grid;grid-template-columns:110px 1fr 72px;align-items:flex-start;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.05)">'
   +'<div style="font-size:13px;font-weight:800;color:'+eC+';padding-top:4px">'+eL1+'</div>'
