@@ -127,18 +127,24 @@ window._ctAutoAnalyze = async function(symbol){
     var res  = data.chart.result[0];
     var meta = res.meta;
     var q    = res.indicators.quote[0];
-    // null 제거
-    var valid = function(arr){ return (arr||[]).map(Number).filter(function(x){return !isNaN(x)&&x>0;}); };
-    var closes  = valid(q.close);
-    var opens   = valid(q.open);
-    var highs   = valid(q.high);
-    var lows    = valid(q.low);
-    var vols    = valid(q.volume);
 
     if(closes.length < 5){
       out.innerHTML = '<div style="padding:12px;color:#f59e0b;font-size:12px">⚠ 데이터 부족. 수동 분석 탭을 이용해 주세요.</div>';
       return;
     }
+
+    // ── 버그1 수정: 날짜 동기화 — 배열별 독립 null 제거 대신 행 단위 동기화 ──
+    var pairs = (res.timestamp||[]).map(function(_,i){
+      return {c:q.close[i], o:q.open[i], h:q.high[i], l:q.low[i], v:q.volume[i]};
+    }).filter(function(d){
+      return d.c!=null && d.o!=null && d.h!=null && d.l!=null
+          && +d.c>0 && +d.h>0 && +d.l>0;
+    });
+    var closes = pairs.map(function(d){return +d.c;});
+    var opens  = pairs.map(function(d){return +d.o;});
+    var highs  = pairs.map(function(d){return +d.h;});
+    var lows   = pairs.map(function(d){return +d.l;});
+    var vols   = pairs.map(function(d){return +d.v||0;});
 
     var curPrice = meta.regularMarketPrice || closes[closes.length-1];
     var currency = meta.currency || 'KRW';
@@ -169,8 +175,9 @@ function loading(sym){
 // ── 자동 분석 알고리즘 ──
 function computeAutoAnalysis(closes, opens, highs, lows, vols, currentPrice){
   var n = closes.length;
-  var avgArr = function(a){ return a.reduce(function(s,x){return s+x;},0)/a.length; };
-  var medArr = function(a){ var s=[].concat(a).sort(function(x,y){return x-y;}); return s[Math.floor(s.length/2)]; };
+  // 버그3 수정: 빈배열 나누기 0 방어
+  var avgArr = function(a){ return a.length ? a.reduce(function(s,x){return s+x;},0)/a.length : 0; };
+  var medArr = function(a){ if(!a.length) return 0; var s=[].concat(a).sort(function(x,y){return x-y;}); return s[Math.floor(s.length/2)]; };
 
   // 이동평균
   var sma20 = avgArr(closes.slice(-Math.min(20,n)));
@@ -232,7 +239,8 @@ function computeAutoAnalysis(closes, opens, highs, lows, vols, currentPrice){
   else if(currentPrice > prev3*1.005)    volContext = 'bounce';
   else if(currentPrice < prev3*0.995)    volContext = 'pullback';
 
-  var rnd = function(x){ return x>0 ? Math.round(x) : 0; };
+  // 버그2 수정: USD 소수점 유지 (150.25 → 150.25, KRW 75000 → formatPrice에서 원 단위로 처리)
+  var rnd = function(x){ return x>0 ? Math.round(x*100)/100 : 0; };
   return {
     structure: structure, frame: 'daily',
     currentPrice: rnd(currentPrice),
@@ -269,6 +277,7 @@ function fillForm(d){
     if(el && val!==undefined && val!==null && val!==0) el.value = val;
   };
   set('ct-structure', d.structure);
+  set('ct-frame',     d.frame||'daily');
   set('ct-price',     d.currentPrice);
   set('ct-box-upper', d.boxUpper);
   set('ct-box-close', d.boxClose);
