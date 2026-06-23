@@ -1081,7 +1081,7 @@ function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, 
 
     fetchNews(ticker).then(function(news){
       var el=document.getElementById('ct-news-area');
-      if(el) el.innerHTML = buildNewsCard(news);
+      if(el) el.innerHTML = buildNewsCard(news, ticker);
     }).catch(function(){});
   } catch(e){
     out.innerHTML = '<div style="padding:14px;color:#ef4444;font-size:13px">표시 오류: '+e.message+'</div>';
@@ -1112,7 +1112,7 @@ window._ctAutoAnalyze = async function(symbol){
       fillForm(aData);
       fetchNews(ticker).then(function(news){
         var el=document.getElementById('ct-news-area');
-        if(el) el.innerHTML = buildNewsCard(news);
+        if(el) el.innerHTML = buildNewsCard(news, ticker);
       });
       return;
     } catch(e){ tvErr = 'parse:'+e.message; tvData = null; }
@@ -1252,6 +1252,41 @@ window._ctSetAvKey = function(){
     alert('API 키 삭제됨');
   }
 };
+
+// ── 분석 결과 클립보드 복사 ──
+window._ctCopyAnalysis = function(encodedData){
+  try {
+    var d = JSON.parse(decodeURIComponent(encodedData));
+    var text = [
+      '📊 차트 분석 결과 ('+(d.sym||'—')+')',
+      '─────────────────',
+      '최종 판단: '+(d.judge||'—'),
+      '',
+      '💰 매매 가격',
+      '1차 매수: '+(d.e1?d.e1.toLocaleString():'—'),
+      '2차 매수: '+(d.e2?d.e2.toLocaleString():'—'),
+      '⛔ 손절가: '+(d.sl?d.sl.toLocaleString():'—')+(d.slPct?' ('+d.slPct+')':''),
+      '🎯 1차 익절: '+(d.t1?d.t1.toLocaleString():'—')+(d.tPct?' ('+d.tPct+')':''),
+      '리스크:리워드: '+(d.rr?'R:R '+d.rr:'—'),
+      '',
+      '⚠ 투자 결정은 반드시 본인이 최종 판단하세요.',
+    ].join('\n');
+
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(text).then(function(){
+        var btn=event.target.closest('button');
+        if(btn){var orig=btn.textContent;btn.textContent='✅ 복사됨';setTimeout(function(){btn.textContent=orig;},2000);}
+      }).catch(function(){ _ctCopyFallback(text); });
+    } else { _ctCopyFallback(text); }
+  } catch(_) {}
+};
+function _ctCopyFallback(text){
+  var ta=document.createElement('textarea');
+  ta.value=text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try{document.execCommand('copy');}catch(_){}
+  document.body.removeChild(ta);
+}
 
 // 에러 화면에서 직접 입력 분석
 window._ctQuickAnalyze = function(){
@@ -1416,6 +1451,7 @@ function fillForm(d){
 window._ctAnalyze = function(){
   var f = function(id){ return parseFloat(document.getElementById(id).value)||0; };
   var s = function(id){ return document.getElementById(id).value; };
+  var fi = function(id){ var el=document.getElementById(id); return el?parseInt(el.value)||1:1; };
   var data = {
     structure:   s('ct-structure'),
     frame:       s('ct-frame'),
@@ -1423,6 +1459,8 @@ window._ctAnalyze = function(){
     boxUpper:    f('ct-box-upper'),
     boxClose:    f('ct-box-close'),
     boxLower:    f('ct-box-lower'),
+    boxUpperCnt: fi('ct-box-upper-cnt'),
+    boxLowerCnt: fi('ct-box-lower-cnt'),
     dojiUpper:   f('ct-doji-upper'),
     dojiClose:   f('ct-doji-close'),
     dojiLower:   f('ct-doji-lower'),
@@ -2684,13 +2722,15 @@ function generateAnalysis(d){
   var bgC    = finalJudge.includes('매수')?'rgba(34,197,94,.15)':finalJudge.includes('매도')?'rgba(239,68,68,.15)':'rgba(245,158,11,.15)';
   var structLabel = (d.structure==='box'?'📦 박스':d.structure==='trend-up'?'📈 상승 추세':'📉 하락 추세')+' | '+grade;
   var dojiTypeText = d.dojiType==='strength'?'추세강화도지':d.dojiType==='reversal'?'추세반전도지':'';
+  var buCnt = d.boxUpperCnt||1, blCnt = d.boxLowerCnt||1;
+  function cntBadge(cnt){ if(cnt<=1) return ''; if(cnt>=3) return ' <span style="color:#f59e0b;font-size:11px">★×'+cnt+'</span>'; return ' <span style="color:#9ca3af;font-size:11px">×'+cnt+'</span>'; }
   var fLines=[];
   if(du) fLines.push(fp(du)+' (도지 상단)');
   if(dc) fLines.push(fp(dc)+' (도지 종가 ★합의)');
   if(dl) fLines.push(fp(dl)+' (도지 하단)');
-  if(bu) fLines.push(fp(bu)+' (박스 상단)');
+  if(bu) fLines.push(fp(bu)+' (박스 상단)'+cntBadge(buCnt));
   if(bc&&hasBox) fLines.push(fp(bc)+' (박스 종가)');
-  if(bl) fLines.push(fp(bl)+' (박스 하단)');
+  if(bl) fLines.push(fp(bl)+' (박스 하단)'+cntBadge(blCnt));
   if(ec) fLines.push(fp(ec)+' (사건봉 종가)');
 
   var eC  = isBuyA ? '#22c55e' : '#ef4444';
@@ -2778,74 +2818,106 @@ function generateAnalysis(d){
   +fLines.map(function(l){ return '<span style="background:var(--s2);border:1.5px solid var(--bd);border-radius:8px;padding:7px 14px;font-size:13px;color:var(--tx);font-weight:700">'+l+'</span>'; }).join('')
   +'</div></div>':'';
 
+  // ── 접기/펼치기 헬퍼 ──
+  var uid=Date.now();
+  function toggle(id,title,content,startOpen){
+    var eid='ct-tog-'+id;
+    return '<div style="margin-bottom:12px;border-radius:12px;border:1px solid var(--bd);overflow:hidden">'
+      +'<button onclick="var el=document.getElementById(\''+eid+'\');var open=el.style.display!==\'none\';el.style.display=open?\'none\':\'block\';this.querySelector(\'.ct-tog-arr\').textContent=open?\'▼\':\'▲\';" '
+      +'style="width:100%;padding:11px 16px;background:var(--s1);border:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;color:var(--tx);font-size:14px;font-weight:700;text-align:left">'
+      +title+'<span class="ct-tog-arr" style="color:#6b7280;font-size:12px">'+(startOpen?'▲':'▼')+'</span></button>'
+      +'<div id="'+eid+'" style="display:'+(startOpen?'block':'none')+'">'
+      +content
+      +'</div></div>';
+  }
+
   return '<div style="background:var(--s2);border-radius:16px;border:1px solid var(--bd);padding:20px;margin-top:4px">'
 
   // 최종 판단 배너
-  +'<div style="padding:16px 18px;border-radius:12px;background:'+bgC+';border:2px solid '+color+';margin-bottom:20px;display:flex;align-items:center;gap:14px">'
+  +'<div style="padding:16px 18px;border-radius:12px;background:'+bgC+';border:2px solid '+color+';margin-bottom:14px;display:flex;align-items:center;gap:14px">'
   +'<div style="font-size:30px;flex-shrink:0">🏁</div>'
   +'<div style="flex:1">'
   +'<div style="font-size:22px;font-weight:900;color:'+color+'">'+finalJudge+'</div>'
   +'<div style="font-size:13px;color:var(--mt);margin-top:5px">'+structLabel+' &nbsp;|&nbsp; 현재가 '+(p?'<b style="color:var(--tx)">'+fp(p)+'</b>':'미입력')+' — '+posStr+'</div>'
   +'</div></div>'
 
-  // ── 기술적 종합 요약 (최상단) ──
+  // ── 핵심 한 줄 요약 + 복사 버튼 ──
+  +(e1p?(function(){
+    var cpd = encodeURIComponent(JSON.stringify({sym:(d.note||'').split('|')[0].trim(),e1:e1p,e2:e2p,sl:slp,t1:t1p,slPct:slPct,tPct:tgt1Pct,rr:rr1,judge:finalJudge}));
+    return '<div style="padding:12px 16px;background:var(--bg);border-radius:10px;border:1px solid var(--bd);margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">'
+    +'<div style="font-size:13px;color:var(--tx);line-height:1.9">'
+    +'<b style="color:#22c55e">1차 매수</b> '+fp(e1p)
+    +(e2p?' &nbsp;·&nbsp; <b style="color:#4ade80">2차</b> '+fp(e2p):'')
+    +(slp?' &nbsp;&nbsp; <b style="color:#ef4444">⛔ 손절</b> '+fp(slp)+(slPct?' <span style="color:#ef4444;font-size:12px">'+slPct+'</span>':''):'')
+    +(t1p?' &nbsp;&nbsp; <b style="color:#60a5fa">🎯 익절</b> '+fp(t1p)+(tgt1Pct?' <span style="color:#60a5fa;font-size:12px">'+tgt1Pct+'</span>':''):'')
+    +(rr1?' &nbsp;<span style="color:#6b7280;font-size:12px">R:R '+rr1+'</span>':'')
+    +'</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button onclick="window._ctCopyAnalysis(\''+cpd+'\')" '
+    +'style="padding:6px 12px;background:transparent;border:1px solid var(--bd);border-radius:6px;color:var(--mt);cursor:pointer;font-size:11px;font-weight:600">📋 복사</button>'
+    +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:6px 12px;background:var(--ac);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">💾 저장</button>'
+    +'</div></div>';
+  })():'')
+
+  // 기술적 종합 요약
   + buildTechSummaryCard(d.indicators, p, fp)
 
   // 가격 테이블
   + priceSummary
 
-  // 지표 기반 포지션 전략 카드
-  +(posStrategy ? (function(){
-    var ps=posStrategy;
-    var html='<div style="margin-bottom:16px;background:var(--bg);border-radius:12px;border:1px solid rgba(255,255,255,.1);padding:16px">';
-    html+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">';
-    html+='<div style="font-size:15px;font-weight:800;color:var(--tx)">📊 지표 기반 포지션 전략</div>';
-    html+='<div style="text-align:right">';
-    html+='<div style="font-size:11px;color:#6b7280;margin-bottom:2px">권장 포지션 비중</div>';
-    html+='<div style="font-size:24px;font-weight:900;color:'+ps.sizeColor+'">'+ps.posSize+'%</div>';
-    html+='</div></div>';
-    // 진행 바
-    html+='<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden;margin-bottom:12px">';
-    html+='<div style="height:100%;width:'+ps.posSize+'%;background:'+ps.sizeColor+';border-radius:4px;transition:width .3s"></div>';
-    html+='</div>';
-    // 신호 목록
-    ps.signals.forEach(function(s){
-      html+='<div style="font-size:12px;color:var(--tx);padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04);line-height:1.5">'+s.t+'</div>';
-    });
-    // 조건부 진입
-    if(ps.condEntry){
-      html+='<div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;font-size:12px;color:#f59e0b">';
-      html+='⏳ <b>조건부 진입:</b> '+ps.condEntry+'</div>';
-    }
-    html+='</div>';
-    return html;
-  })() : '')
+  // 포지션 전략 (접기 가능)
+  +(posStrategy ? toggle('ps'+uid, '📊 지표 기반 포지션 전략 &nbsp;<span style="font-size:13px;font-weight:700;color:'+posStrategy.sizeColor+'">'+posStrategy.posSize+'%</span>',
+    (function(){
+      var ps=posStrategy;
+      var h='<div style="padding:14px 16px">';
+      h+='<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden;margin-bottom:12px"><div style="height:100%;width:'+ps.posSize+'%;background:'+ps.sizeColor+';border-radius:4px"></div></div>';
+      ps.signals.forEach(function(s){ h+='<div style="font-size:12px;color:var(--tx);padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">'+s.t+'</div>'; });
+      if(ps.condEntry) h+='<div style="margin-top:10px;padding:10px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;font-size:12px;color:#f59e0b">⏳ <b>조건부 진입:</b> '+ps.condEntry+'</div>';
+      h+='</div>';
+      return h;
+    })(), true) : '')
 
-  // 근거 분석
-  + buildReasonCard(d, fp, d.indicators||{}, isBuyA, (d.indicators||{}).patterns||[])
+  // 매수 근거 (접기 가능)
+  + toggle('rc'+uid, '💡 매수 근거 종합 분석', buildReasonCard(d, fp, d.indicators||{}, isBuyA, (d.indicators||{}).patterns||[]), true)
 
-  // 시나리오
-  + scenarioCards
+  // 시나리오 (접기 가능)
+  +(scenarioCards ? toggle('sc'+uid, '📋 매매 시나리오 A/B', scenarioCards.replace('<div style="margin-bottom:16px">','<div>').replace('<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:10px">📋 매매 시나리오</div>',''), true) : '')
 
-  // 기능선
-  + funcLines
+  // 기능선 + 거래량 (접기 가능)
+  + toggle('fl'+uid, '📍 핵심 기능선 & 거래량',
+    (funcLines.replace('<div style="margin-bottom:16px">','<div style="margin:0 0 8px 0">') || '')
+    +'<div style="padding:10px 16px 0">'
+    +'<div style="font-size:13px;color:#c5d5e0;line-height:2">'
+    +'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">거래량</span>'+volText+'</div>'
+    +(gapText?'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">갭</span>'+gapText+'</div>':'')
+    +(supportC.length?'<div><span style="font-size:12px;font-weight:700;color:#22c55e;min-width:54px;display:inline-block">지지</span>'+supportC.slice(0,2).join(' / ')+'</div>':'')
+    +(resistC.length?'<div><span style="font-size:12px;font-weight:700;color:#ef4444;min-width:50px;display:inline-block">저항</span>'+resistC.slice(0,2).join(' / ')+'</div>':'')
+    +'</div></div>', false)
 
-  // 거래량/갭/지지저항 요약
-  +'<div style="padding:12px 16px;background:var(--bg);border-radius:10px;border:1px solid rgba(255,255,255,.06);margin-bottom:4px">'
-  +'<div style="font-size:13px;color:#c5d5e0;line-height:2.1">'
-  +'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">거래량</span>'+volText+'</div>'
-  +(gapText?'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:54px;display:inline-block">갭</span>'+gapText+'</div>':'')
-  +(supportC.length?'<div><span style="font-size:12px;font-weight:700;color:#22c55e;min-width:54px;display:inline-block">지지</span>'+supportC.slice(0,2).join(' / ')+'</div>':'')
-  +(resistC.length?'<div><span style="font-size:12px;font-weight:700;color:#ef4444;min-width:50px;display:inline-block">저항</span>'+resistC.slice(0,2).join(' &nbsp;/&nbsp; ')+'</div>':'')
-  +(d.note?'<div><span style="font-size:12px;font-weight:700;color:#9ca3af;min-width:50px;display:inline-block">참고</span>'+d.note+'</div>':'')
-  +'</div></div>'
+  // 진입 전 체크리스트 (차트술사 이론)
+  + toggle('cl'+uid, '✅ 진입 전 체크리스트 (차트술사 구조론)',
+    '<div style="padding:14px 16px">'
+    +([ ['박스 또는 도지 구간 확인했는가?', '기능선이 없으면 진입 근거 없음'],
+        ['기능선의 格 확인했는가?', 'S급(월봉) > A급(주봉) > B급(일봉)'],
+        ['거래량 동반 여부 확인했는가?', '돌파 시 거래량 증가 = 신뢰도 상승'],
+        ['손절가 종가 기준으로 설정했는가?', '장중 고저가 아닌 종가 기준'],
+        ['진입 근거를 명확히 기록했는가?', '근거 사라지면 즉시 손절'],
+        ['리테스트 완료 여부 확인했는가?', '눌림/되돌림 후 지지/저항 전환 확인'],
+        ['2차 매수가 1차와 다른 가격인가?', '같으면 의미 없음'],
+        ['R:R 1:1 이상인가?', '손실 대비 수익이 최소 같아야 함']
+      ].map(function(item){
+        return '<label style="display:flex;align-items:flex-start;gap:10px;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer">'
+          +'<input type="checkbox" style="margin-top:2px;flex-shrink:0;accent-color:var(--ac)">'
+          +'<div><div style="font-size:13px;color:var(--tx);font-weight:600">'+item[0]+'</div>'
+          +'<div style="font-size:11px;color:#6b7280;margin-top:1px">'+item[1]+'</div></div></label>';
+      }).join(''))
+    +'</div>', false)
 
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">'
-  +'<div style="font-size:12px;color:#4b5563">⚠ 구조론 기반 시나리오 — 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
-  +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:8px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">💾 분석 저장</button>'
+  +'<div style="margin-top:10px;font-size:12px;color:#4b5563;text-align:center">⚠ 구조론 기반 시나리오 — 투자 결정은 반드시 본인이 최종 판단하세요.</div>'
   +'</div>'
-  +'</div>'
-  + buildTechSection(d.indicators, p, fp);
+  // 기술적 분석 (접기 가능 — 기본 닫힘)
+  + toggle('ta'+uid, '📊 기술적 분석 상세 (RSI·MACD·볼린저·캔들·패턴)',
+    (buildTechSection(d.indicators, p, fp)||'<div style="padding:14px;color:#6b7280;font-size:13px;text-align:center">지표 데이터 없음 — 종목 자동 분석 후 상세 지표가 표시됩니다.</div>'), false);
 }
 
 // ── 뉴스 fetch ──
@@ -2868,8 +2940,23 @@ function classifyNews(title){
 }
 
 // ── 뉴스 카드 빌더 ──
-function buildNewsCard(news){
-  if(!news || !news.length) return '';
+function buildNewsCard(news, ticker){
+  if(!news || !news.length){
+    var sym = (ticker||'').replace(/^(KRX:|KRSE:)/,'');
+    var naverLink = sym && /^\d{6}$/.test(sym)
+      ? 'https://finance.naver.com/item/news_news.naver?code='+sym
+      : 'https://search.naver.com/search.naver?query='+(sym||'주식')+'%20주가%20뉴스';
+    return '<div style="margin-top:14px;background:var(--s2);border-radius:12px;border:1px solid var(--bd);padding:16px">'
+      +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:10px">📰 뉴스</div>'
+      +'<div style="font-size:13px;color:#6b7280;text-align:center;padding:10px 0 4px">'
+      +'자동 뉴스 수집 불가 &mdash; 직접 확인하세요'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">'
+      +(sym&&/^\d{6}$/.test(sym)?'<a href="https://finance.naver.com/item/news_news.naver?code='+sym+'" target="_blank" rel="noopener" style="padding:7px 14px;background:rgba(34,197,94,.12);border:1px solid #22c55e;border-radius:8px;font-size:12px;color:#22c55e;text-decoration:none;font-weight:700">네이버 뉴스</a>':'')
+      +(sym?'<a href="https://search.naver.com/search.naver?query='+encodeURIComponent(sym)+'+주가" target="_blank" rel="noopener" style="padding:7px 14px;background:rgba(59,130,246,.1);border:1px solid #3b82f6;border-radius:8px;font-size:12px;color:#60a5fa;text-decoration:none;font-weight:700">네이버 검색</a>':'')
+      +(sym&&!/^\d{6}$/.test(sym)?'<a href="https://finance.yahoo.com/quote/'+encodeURIComponent(sym)+'/news/" target="_blank" rel="noopener" style="padding:7px 14px;background:rgba(156,163,175,.1);border:1px solid #4b5563;border-radius:8px;font-size:12px;color:#9ca3af;text-decoration:none;font-weight:700">Yahoo Finance</a>':'')
+      +'</div></div>';
+  }
   var now = Math.floor(Date.now()/1000);
   var timeAgo = function(ts){
     var diff = now - ts;
@@ -3073,7 +3160,15 @@ function buildAnalyzePane(){
   +'<div class="ct-form-row"><div class="ct-label">박스 상단 (저항)</div><input id="ct-box-upper" class="ct-input" type="number" placeholder="박스 상단"></div>'
   +'<div class="ct-form-row"><div class="ct-label">종가 클러스터 (균형)</div><input id="ct-box-close" class="ct-input" type="number" placeholder="생략시 중간값 자동"></div>'
   +'<div class="ct-form-row"><div class="ct-label">박스 하단 (지지)</div><input id="ct-box-lower" class="ct-input" type="number" placeholder="박스 하단"></div>'
-  +'</div></div>'
+  +'</div>'
+  +'<div class="ct-g2" style="margin-top:6px">'
+  +'<div class="ct-form-row"><div class="ct-label">상단 반복 횟수 <span style="color:#6b7280;font-size:10px">(저항 검증 횟수)</span></div>'
+  +'<input id="ct-box-upper-cnt" class="ct-input" type="number" min="1" max="20" placeholder="예: 3" value="1"></div>'
+  +'<div class="ct-form-row"><div class="ct-label">하단 반복 횟수 <span style="color:#6b7280;font-size:10px">(지지 검증 횟수)</span></div>'
+  +'<input id="ct-box-lower-cnt" class="ct-input" type="number" min="1" max="20" placeholder="예: 2" value="1"></div>'
+  +'</div>'
+  +'<div style="font-size:10px;color:#4b5563;margin-top:4px">반복 횟수가 많을수록 기능선이 강함 — 3회 이상이면 신뢰도 높음</div>'
+  +'</div>'
   +'<div class="ct-box"><div class="ct-box-t">🕯 도지 경계</div><div class="ct-g3">'
   +'<div class="ct-form-row"><div class="ct-label">도지 상단</div><input id="ct-doji-upper" class="ct-input" type="number" placeholder="도지 상단"></div>'
   +'<div class="ct-form-row"><div class="ct-label">도지 종가 (합의가격)</div><input id="ct-doji-close" class="ct-input" type="number" placeholder="도지 종가"></div>'
