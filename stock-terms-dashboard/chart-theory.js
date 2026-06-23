@@ -103,6 +103,20 @@ window._ctDeleteHistory = function(id){
   renderHistory();
 };
 
+// ── 기록 검색/필터 ──
+window._ctHistSearch = function(){
+  var q=((document.getElementById('ct-hist-search')||{}).value||'').toLowerCase();
+  var f=(document.getElementById('ct-hist-filter')||{}).value||'';
+  var rows=document.querySelectorAll('#ct-hist-body tr');
+  rows.forEach(function(tr){
+    var sym=tr.querySelector('b')?tr.querySelector('b').textContent.toLowerCase():'';
+    var res=tr.querySelector('select')?(tr.querySelector('select').value||''):'';
+    var matchQ=!q||sym.includes(q);
+    var matchF=!f||(f===''?res==='':res===f);
+    tr.style.display=(matchQ&&matchF)?'':'none';
+  });
+};
+
 // 분석 통계
 function _ctRenderStats(hist){
   var el=document.getElementById('ct-hist-stats');
@@ -334,6 +348,57 @@ var _KR_DICT=[
   ['007070','GS리테일','gs리테일'],['069500','KODEX 200','코덱스200'],
   ['114800','KODEX 인버스','코덱스인버스'],
   ['233740','KODEX 코스닥150레버리지','코스닥레버리지','코스닥레버'],
+  // 추가 종목 (150개+)
+  ['000990','DB하이텍','db하이텍'],['058470','리노공업','리노'],
+  ['039490','키움증권','키움'],['016360','삼성증권','삼성증권'],
+  ['071050','한국금융지주','한국투자증권','한투'],['003530','대신증권','대신'],
+  ['006800','미래에셋증권','미래에셋'],['008560','메리츠증권','메리츠증권'],
+  ['047050','포스코인터내셔널','포스코인터'],['002380','KCC','kcc'],
+  ['010060','OCI홀딩스','oci'],['004000','롯데정밀화학','롯데정밀'],
+  ['078930','GS','gs홀딩스'],['018880','한온시스템','한온'],
+  ['064350','현대로템','로템'],['082740','HSD엔진','hsd'],
+  ['042660','한화오션','한화오션','대우조선'],['010140','삼성중공업','삼성중공'],
+  ['000120','CJ대한통운','대한통운'],['117930','한진','한진칼','한진그룹'],
+  ['006110','삼성SDI','삼성sdi'],['247540','에코프로비엠','에코프로비엠'],
+  ['012450','한화에어로스페이스','한화에어로','한화방산'],
+  ['272210','한화시스템','한화시스템'],['329180','HD현대중공업','hd현대중공업'],
+  ['161390','한국타이어앤테크놀로지','한국타이어','한타'],
+  ['000810','삼성화재','삼성화재'],['001450','현대해상','현대해상'],
+  ['082640','동양생명','동양생명'],['088350','한화생명','한화생명'],
+  ['032830','삼성생명','삼성생명'],['060980','한화손해보험','한화손보'],
+  ['251270','넷마블','넷마블'],['263750','펄어비스','펄어비스'],
+  ['225570','넥슨게임즈','넥슨'],['293490','카카오게임즈','카카오게임'],
+  ['036570','엔씨소프트','엔씨'],['112040','위메이드','위메이드'],
+  ['041510','SM엔터테인먼트','sm엔터','에스엠'],['035900','JYP엔터테인먼트','jyp','제이와이피'],
+  ['352820','HYBE','하이브'],['122870','YG엔터테인먼트','yg','와이지'],
+  ['145020','휴젤','휴젤'],['102260','동성제약','동성'],
+  ['068760','셀트리온제약','셀트리온제약'],['326030','SK바이오팜','sk바이오팜'],
+  ['032640','LG유플러스','lg유플러스','lgu'],['018260','삼성에스디에스','삼성sds','sds'],
+  ['036460','한국가스공사','가스공사','kogas'],['015760','한국전력','한전','kepco'],
+  ['034020','두산에너빌리티','두산에너빌','두산중공업'],
+  ['090350','노루페인트','노루'],['051600','한전KPS','한전kps'],
+  ['034730','SK','sk주식'],['003670','포스코퓨처엠','포스코퓨처','pm'],
+  ['400760','HPSP','hpsp'],['440110','파두','파두'],['403870','HPSP','에이치피에스피'],
+  ['425220','일진하이솔루스','일진하이'],['091810','티웨이항공','티웨이'],
+  ['004590','한국가스공사','kgs'],['035720','카카오','다음카카오'],
+  ['377300','카카오페이','카카오페이'],['293490','카카오게임즈','카게'],
+  ['034220','LG디스플레이','lg디플','lgd'],['066970','엘앤에프','엘앤에프','lnf'],
+  ['096770','SK이노베이션','sk이노'],['010130','고려아연','고려아연'],
+  ['030000','제일기획','제일기획'],['000070','삼양홀딩스','삼양'],
+  ['241560','두산밥캣','밥캣'],['000150','두산','두산그룹'],
+  ['005830','DB손해보험','db손보'],['000540','흥국화재','흥국'],
+  // KODEX ETF 확장
+  ['069500','KODEX 200','코덱스200','kodex200'],
+  ['114800','KODEX 인버스','코덱스인버스','인버스'],
+  ['252670','KODEX 200선물인버스2X','코덱스인버스2x','곱인버스'],
+  ['122630','KODEX 레버리지','코덱스레버리지','레버리지'],
+  ['229200','KODEX 코스닥150','코덱스코스닥150'],
+  ['091160','KODEX 반도체','코덱스반도체','반도체etf'],
+  ['139270','KODEX 바이오','코덱스바이오','바이오etf'],
+  ['266410','KODEX 2차전지산업','코덱스2차전지','2차전지etf'],
+  ['168300','KODEX 미국S&P500선물(H)','sp500etf','코덱스sp500'],
+  ['261270','KODEX 미국나스닥100선물(H)','나스닥etf','코덱스나스닥'],
+  ['304940','KODEX 골드선물(H)','골드etf','코덱스금'],
 ];
 
 function _krSearch(q){
@@ -436,7 +501,22 @@ window._ctSelectSym = function(code){
   setTimeout(function(){ initTV(); _tvLoaded=true; }, 50);
   window._ctAutoFill(tvSym);
   window._ctAutoAnalyze(tvSym);
+  setTimeout(function(){ _ctNoteLoad(tvSym); }, 200);
 };
+
+// ── 종목별 노트 ──
+function _ctNoteKey(sym){ return 'ct_note_'+(sym||'').replace(/[^A-Z0-9]/g,'_'); }
+window._ctNoteSave = function(){
+  var ta=document.getElementById('ct-sym-note'); if(!ta) return;
+  var sym=_ctSymbol||''; if(!sym) return;
+  localStorage.setItem(_ctNoteKey(sym), ta.value);
+  var btn=document.querySelector('[onclick="window._ctNoteSave()"]');
+  if(btn){ btn.textContent='✅'; setTimeout(function(){btn.textContent='저장';},1500); }
+};
+function _ctNoteLoad(sym){
+  var ta=document.getElementById('ct-sym-note'); if(!ta) return;
+  ta.value=localStorage.getItem(_ctNoteKey(sym||_ctSymbol))||'';
+}
 
 // ── 즐겨찾기 ──
 function _ctGetFavs(){ return JSON.parse(localStorage.getItem('ct_favs')||'[]'); }
@@ -2645,7 +2725,7 @@ function buildSeasonalityCard(){
   +'</div>';
 }
 
-function buildSeasonalityInner(){
+window.buildSeasonalityInner = function(){
   var selected=window._seasonSym||'S&P500';
   var data=_SEASONALITY[selected]; if(!data) return '';
   var now=new Date(); var curMonth=now.getMonth();
@@ -2665,6 +2745,86 @@ function buildSeasonalityInner(){
   }).join('')
   +'</div>';
 }
+
+// ══════════════════════════════════════
+// ── 세계 증시 운영 시간 ──
+// ══════════════════════════════════════
+function buildMarketHoursCard(){
+  var now=new Date();
+  // UTC 기준 오프셋 (분)
+  var utcH=now.getUTCHours(), utcM=now.getUTCMinutes();
+  var utcMin=utcH*60+utcM;
+
+  function isOpen(openUTC, closeUTC){
+    if(openUTC<closeUTC) return utcMin>=openUTC&&utcMin<closeUTC;
+    return utcMin>=openUTC||utcMin<closeUTC; // crosses midnight
+  }
+  function toLocal(utcMins){
+    var d=new Date(); d.setUTCHours(Math.floor(utcMins/60)%24, utcMins%60, 0, 0);
+    return d.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',hour12:false});
+  }
+
+  var markets=[
+    {name:'KRX 코스피',  flag:'🇰🇷', openUTC:0*60,   closeUTC:6*60+30,  color:'#22c55e'},  // 09:00~15:30 KST = 00:00~06:30 UTC
+    {name:'TSE 도쿄',    flag:'🇯🇵', openUTC:0*60,   closeUTC:6*60,     color:'#f59e0b'},  // 09:00~15:00 JST
+    {name:'LSE 런던',    flag:'🇬🇧', openUTC:8*60,   closeUTC:16*60+30, color:'#60a5fa'},  // 08:00~16:30 UTC (WST)
+    {name:'NYSE/NASDAQ', flag:'🇺🇸', openUTC:13*60+30,closeUTC:20*60,   color:'#a855f7'},  // 09:30~16:00 ET = 13:30~20:00 UTC
+  ];
+  // 서머타임 근사 (3~11월)
+  var m=now.getUTCMonth();
+  if(m>=2&&m<=10){
+    markets[2].openUTC=7*60; markets[2].closeUTC=15*60+30; // BST
+    markets[3].openUTC=13*60; markets[3].closeUTC=19*60+30; // EDT
+  }
+
+  return '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">'
+    +markets.map(function(mk){
+      var open=isOpen(mk.openUTC,mk.closeUTC);
+      var statusC=open?mk.color:'#4b5563';
+      var statusL=open?'개장':'폐장';
+      return '<div style="padding:6px 10px;background:var(--s2);border-radius:8px;border:1px solid '+(open?mk.color+'44':'var(--bd)')+';display:flex;align-items:center;gap:6px">'
+        +'<span>'+mk.flag+'</span>'
+        +'<div><div style="font-size:10px;font-weight:700;color:var(--tx)">'+mk.name+'</div>'
+        +'<div style="font-size:10px;color:'+statusC+'"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:'+statusC+';margin-right:3px;vertical-align:middle">'+'</span>'+statusL+'</div></div>'
+        +'</div>';
+    }).join('')
+    +'<div style="padding:6px 10px;background:var(--s2);border-radius:8px;border:1px solid var(--bd);display:flex;align-items:center;gap:6px">'
+    +'<span>🕐</span><div><div style="font-size:10px;font-weight:700;color:var(--tx)">현재 시각</div>'
+    +'<div style="font-size:10px;color:var(--mt)">'+now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})+'</div></div>'
+    +'</div>'
+    +'</div>';
+}
+
+// ══════════════════════════════════════
+// ── 환율 변환기 ──
+// ══════════════════════════════════════
+window._ctCalcFX = function(){
+  var amt  = parseFloat((document.getElementById('ct-fx-amt')||{}).value)||0;
+  var from = (document.getElementById('ct-fx-from')||{}).value||'USD';
+  var to   = (document.getElementById('ct-fx-to')||{}).value||'KRW';
+  var res  = document.getElementById('ct-fx-result'); if(!res) return;
+
+  // 시장 데이터에서 환율 가져오기
+  var fxRates={'KRW':1, 'USD':0, 'JPY':0, 'EUR':0};
+  if(_mktCache&&_mktCache.items){
+    var usdkrw=_mktCache.items.find(function(i){return i.label==='원/달러';});
+    if(usdkrw&&usdkrw.price){ fxRates.USD=1/usdkrw.price; fxRates.JPY=1/(usdkrw.price/100); fxRates.EUR=1/(usdkrw.price*0.92); }
+  }
+  // 폴백 환율 (최신 근사)
+  if(!fxRates.USD){ fxRates.USD=1/1380; fxRates.JPY=1/9.2; fxRates.EUR=1/1500; }
+
+  if(!amt){ res.innerHTML='<span style="color:#6b7280">금액을 입력하세요</span>'; return; }
+
+  // 기준화: KRW로 변환 후 대상 통화로
+  var amtKRW = from==='KRW' ? amt : amt / fxRates[from];
+  var result  = to==='KRW' ? amtKRW : amtKRW * fxRates[to];
+
+  var fmtMap={'KRW':function(v){return Math.round(v).toLocaleString()+'원';},'USD':function(v){return '$'+v.toFixed(2);},'JPY':function(v){return '¥'+Math.round(v).toLocaleString();},'EUR':function(v){return '€'+v.toFixed(2);}};
+  var fmt=fmtMap[to]||function(v){return v.toFixed(4);};
+
+  res.innerHTML='<div style="font-size:22px;font-weight:900;color:var(--tx)">'+fmt(result)+'</div>'
+    +'<div style="font-size:11px;color:#6b7280;margin-top:4px">'+(fmtMap[from]||function(v){return v;})(amt)+' → '+fmt(result)+(fxRates.USD?'<span style="color:#4b5563;margin-left:8px">(실시간 환율 사용)</span>':'<span style="color:#4b5563;margin-left:8px">(근사 환율)</span>')+'</div>';
+};
 
 // ── 수익 목표 계획기 ──
 window._ctCalcGoal = function(){
@@ -4365,6 +4525,9 @@ function buildChartPane(){
   +'<div id="ct-fav-recent"></div>'
   +'</div>'
 
+  // 세계 증시 운영 시간 (항상 표시)
+  +'<div id="ct-mkt-hours">'+buildMarketHoursCard()+'</div>'
+
   // 시장 현황 카드
   +'<div id="ct-market-card"><div style="padding:8px;text-align:center;color:var(--mt);font-size:11px">🌐 시장 데이터 로드 중...</div></div>'
 
@@ -4375,11 +4538,17 @@ function buildChartPane(){
   +'<div class="ct-col-left">'
   +'<div id="ct-tv-box" style="height:480px;border-radius:12px;overflow:hidden;border:1px solid var(--bd);margin-bottom:8px"></div>'
   // 멀티 타임프레임 안내
-  +'<div style="padding:10px 12px;background:var(--s2);border-radius:10px;border:1px solid var(--bd);font-size:11px;color:#6b7280">'
-  +'💡 <b style="color:var(--tx)">멀티 타임프레임 분석 방법</b><br>'
-  +'① 월봉(M) 선택 → 박스 경계 확인 (S급 기능선)<br>'
-  +'② 주봉(W) 선택 → 추세 방향 확인 (A급 기능선)<br>'
-  +'③ 일봉(D) 선택 → 진입 타점 확인 (B급 기능선)'
+  +'<div style="padding:10px 12px;background:var(--s2);border-radius:10px;border:1px solid var(--bd);font-size:11px;color:#6b7280;margin-bottom:8px">'
+  +'💡 <b style="color:var(--tx)">멀티 타임프레임 분석</b><br>'
+  +'① 월봉(M) → 박스 경계 (S급) &nbsp; ② 주봉(W) → 추세 방향 (A급) &nbsp; ③ 일봉(D) → 진입 타점 (B급)'
+  +'</div>'
+  // 종목별 노트
+  +'<div style="background:var(--s2);border-radius:10px;border:1px solid var(--bd);overflow:hidden">'
+  +'<div style="padding:7px 12px;background:var(--s1);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--tx)">📝 종목 노트</div>'
+  +'<button onclick="window._ctNoteSave()" style="padding:3px 10px;background:var(--ac);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700">저장</button>'
+  +'</div>'
+  +'<textarea id="ct-sym-note" style="width:100%;min-height:80px;background:transparent;border:none;padding:10px 12px;color:var(--tx);font-size:12px;resize:vertical;box-sizing:border-box;outline:none;line-height:1.6" placeholder="이 종목에 대한 메모, 분석 아이디어, 주의사항 등 자유롭게 작성하세요..."></textarea>'
   +'</div>'
   +'</div>'
 
@@ -4513,6 +4682,18 @@ function buildHistoryPane(){
 
   // 패턴 분석
   +'<div id="ct-journal-analysis"></div>'
+
+  // 검색 + 필터
+  +'<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">'
+  +'<input id="ct-hist-search" class="ct-input" style="flex:1;min-width:120px" placeholder="🔍 종목명 검색..." oninput="window._ctHistSearch()">'
+  +'<select id="ct-hist-filter" class="ct-input" style="max-width:110px" onchange="window._ctHistSearch()">'
+  +'<option value="">전체</option>'
+  +'<option value="성공">✅ 성공</option>'
+  +'<option value="실패">❌ 실패</option>'
+  +'<option value="보유중">📊 보유중</option>'
+  +'<option value="">미확인</option>'
+  +'</select>'
+  +'</div>'
 
   // 분석 기록
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">'
@@ -4685,10 +4866,43 @@ window._ctRefreshPortfolio = async function(){
 function buildCalendarPane(){
   return '<div class="ct-pane" data-pane="calendar" style="display:none;padding:16px">'
   +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📅 경제 지표 & 이벤트 캘린더</div>'
-  +'<div style="font-size:11px;color:#6b7280;margin-bottom:14px">주요 경제 이벤트까지 남은 일수. 이벤트 전후 변동성 증가에 주의.</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:10px">주요 경제 이벤트까지 남은 일수. 이벤트 전후 변동성 증가에 주의.</div>'
+  // 사용자 이벤트 추가
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:12px">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--tx);margin-bottom:8px">+ 나만의 이벤트 추가</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr auto auto;gap:8px;align-items:end">'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:3px">날짜</div>'
+  +'<input id="ct-ev-date" class="ct-input" type="date"></div>'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:3px">이벤트명</div>'
+  +'<input id="ct-ev-label" class="ct-input" placeholder="예: AAPL 실적 발표"></div>'
+  +'<div><div style="font-size:10px;color:#6b7280;margin-bottom:3px">영향</div>'
+  +'<select id="ct-ev-impact" class="ct-input">'
+  +'<option value="high">고</option><option value="medium" selected>중</option><option value="low">저</option>'
+  +'</select></div>'
+  +'<button onclick="window._ctAddEvent()" style="padding:9px 12px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">추가</button>'
+  +'</div></div>'
   +'<div id="ct-cal-content"><div style="color:var(--mt);font-size:12px">로딩 중...</div></div>'
   +'</div>';
 }
+
+// 사용자 이벤트 저장
+function _ctEvGet(){ return JSON.parse(localStorage.getItem('ct_events')||'[]'); }
+window._ctAddEvent = function(){
+  var date =(document.getElementById('ct-ev-date')||{}).value||'';
+  var label=(document.getElementById('ct-ev-label')||{}).value||'';
+  var impact=(document.getElementById('ct-ev-impact')||{}).value||'medium';
+  if(!date||!label){ alert('날짜와 이벤트명을 입력하세요'); return; }
+  var evs=_ctEvGet();
+  evs.push({date:date, label:label, impact:impact, cat:'user', desc:'사용자 직접 추가', id:Date.now()});
+  localStorage.setItem('ct_events', JSON.stringify(evs));
+  var inp=document.getElementById('ct-ev-label'); if(inp) inp.value='';
+  _ctRenderCalendar();
+};
+window._ctDelEvent = function(id){
+  var evs=_ctEvGet().filter(function(e){return e.id!==id;});
+  localStorage.setItem('ct_events', JSON.stringify(evs));
+  _ctRenderCalendar();
+};
 
 // 경제 캘린더 데이터 (2026년 주요 일정)
 var _CALENDAR_EVENTS = [
@@ -4738,19 +4952,23 @@ function _ctRenderCalendar(){
   var now=new Date(); now.setHours(0,0,0,0);
   var today=now.getTime();
 
-  // 오늘 이후 이벤트만, 날짜순 정렬
-  var upcoming=_CALENDAR_EVENTS.map(function(e){
+  // 사용자 이벤트 병합
+  var userEvs=_ctEvGet().map(function(e){ return Object.assign({},e,{isUser:true}); });
+  var allEvs=_CALENDAR_EVENTS.concat(userEvs);
+
+  var upcoming=allEvs.map(function(e){
     var d=new Date(e.date); d.setHours(0,0,0,0);
     var diff=Math.round((d.getTime()-today)/(86400000));
     return Object.assign({},e,{diff:diff,dateObj:d});
   }).filter(function(e){return e.diff>=-3;}).sort(function(a,b){return a.diff-b.diff;});
 
   var catInfo={
-    fomc: {label:'FOMC',color:'#ef4444',bg:'rgba(239,68,68,.1)'},
-    cpi:  {label:'CPI', color:'#f97316',bg:'rgba(249,115,22,.1)'},
+    fomc: {label:'FOMC',  color:'#ef4444',bg:'rgba(239,68,68,.1)'},
+    cpi:  {label:'CPI',   color:'#f97316',bg:'rgba(249,115,22,.1)'},
     expiry:{label:'옵션만기',color:'#a855f7',bg:'rgba(168,85,247,.1)'},
-    bok:  {label:'금통위',color:'#60a5fa',bg:'rgba(96,165,250,.1)'},
-    jobs: {label:'고용',color:'#f59e0b',bg:'rgba(245,158,11,.1)'},
+    bok:  {label:'금통위', color:'#60a5fa',bg:'rgba(96,165,250,.1)'},
+    jobs: {label:'고용',   color:'#f59e0b',bg:'rgba(245,158,11,.1)'},
+    user: {label:'내 이벤트',color:'#22c55e',bg:'rgba(34,197,94,.1)'},
   };
 
   // 필터 버튼 상태
@@ -4780,8 +4998,10 @@ function _ctRenderCalendar(){
       +'<span style="padding:2px 8px;border-radius:10px;background:'+info.bg+';color:'+info.color+';font-size:10px;font-weight:800">'+info.label+'</span>'
       +(e.impact==='high'?'<span style="font-size:10px;color:#ef4444">🔴 고영향</span>':'<span style="font-size:10px;color:#f59e0b">🟡 중영향</span>')
       +'</div>'
+      +'<div style="display:flex;align-items:center;gap:8px">'
       +'<div style="font-size:13px;font-weight:800;color:var(--tx)">'+diffStr+'</div>'
-      +'</div>'
+      +(e.isUser?'<button onclick="window._ctDelEvent('+e.id+')" style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:12px;padding:0">🗑</button>':'')
+      +'</div></div>'
       +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:3px">'+e.label+'</div>'
       +'<div style="font-size:11px;color:#6b7280;margin-bottom:3px">'+e.date+'</div>'
       +'<div style="font-size:11px;color:var(--mt);line-height:1.5">'+e.desc+'</div>'
@@ -5330,6 +5550,28 @@ function buildToolsPane(){
 
   // ⑥ 계절성 분석
   +(buildSeasonalityCard())
+
+  // ⑦ 환율 변환기
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">💱 환율 변환기</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">시장 현황 환율 연동 (미로드 시 근사 환율 사용)</div>'
+  +'<div style="display:grid;grid-template-columns:1fr auto 1fr auto;gap:8px;align-items:end;margin-bottom:10px">'
+  +'<div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:4px">금액</div>'
+  +'<input id="ct-fx-amt" class="ct-input" type="number" placeholder="예: 1000" oninput="window._ctCalcFX()"></div>'
+  +'<div style="padding-bottom:8px">'
+  +'<select id="ct-fx-from" class="ct-input" style="width:80px" onchange="window._ctCalcFX()">'
+  +'<option value="USD">USD</option><option value="KRW">KRW</option><option value="JPY">JPY</option><option value="EUR">EUR</option>'
+  +'</select></div>'
+  +'<div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:4px">→ 변환 통화</div>'
+  +'<select id="ct-fx-to" class="ct-input" onchange="window._ctCalcFX()">'
+  +'<option value="KRW">KRW</option><option value="USD">USD</option><option value="JPY">JPY</option><option value="EUR">EUR</option>'
+  +'</select></div>'
+  +'<div style="padding-bottom:8px"><button class="ct-btn" style="padding:9px 14px;margin:0" onclick="window._ctCalcFX()">변환</button></div>'
+  +'</div>'
+  +'<div id="ct-fx-result"><div style="font-size:12px;color:#6b7280">금액을 입력하세요</div></div>'
+  +'</div>'
 
   +'</div>';
 }
