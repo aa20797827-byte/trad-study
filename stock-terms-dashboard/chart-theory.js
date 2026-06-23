@@ -105,7 +105,7 @@ window._ctCalcPosition = function(){
   var entry = parseFloat((document.getElementById('ct-calc-entry')||{}).value)||0;
   var stop = parseFloat((document.getElementById('ct-calc-stop')||{}).value)||0;
   var target = parseFloat((document.getElementById('ct-calc-target')||{}).value)||0;
-  var cur = (document.getElementById('ct-c-currency')||document.getElementById('ct-currency')||{}).value||'KRW';
+  var cur = (document.getElementById('ct-calc-cur')||document.getElementById('ct-c-currency')||document.getElementById('ct-currency')||{}).value||'KRW';
   var res = document.getElementById('ct-calc-result');
   if(!res) return;
 
