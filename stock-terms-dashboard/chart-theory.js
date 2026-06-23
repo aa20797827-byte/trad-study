@@ -152,9 +152,12 @@ function renderHistory(){
   var el = document.getElementById('ct-hist-body');
   if(!el) return;
   var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
-  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; _ctRenderStats([]); _ctRenderHoldings([]); return; }
+  if(!hist.length){ el.innerHTML='<tr><td colspan="8" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; _ctRenderStats([]); _ctRenderHoldings([]); return; }
   _ctRenderStats(hist);
   _ctRenderHoldings(hist);
+  // 패턴 분석
+  var jaEl=document.getElementById('ct-journal-analysis');
+  if(jaEl) jaEl.innerHTML=buildJournalAnalysis(hist);
   // 실현 손익 통계 계산
   var closed=hist.filter(function(h){return h.exitPrice&&h.price;});
   var totalPnl=closed.reduce(function(acc,h){
@@ -506,10 +509,11 @@ window._ctSwitchTab = function(id){
   _ctTab = id;
   document.querySelectorAll('.ct-tab').forEach(function(b){ b.classList.toggle('on', b.dataset.t===id); });
   document.querySelectorAll('.ct-pane').forEach(function(c){ c.style.display = c.dataset.pane===id ? 'block' : 'none'; });
-  if(id==='chart' && !_tvLoaded){ setTimeout(initTV, 250); _tvLoaded=true; }
-  if(id==='history'){ setTimeout(renderHistory, 50); }
-  if(id==='alerts'){ setTimeout(_ctRenderAlerts, 50); }
+  if(id==='chart'    && !_tvLoaded){ setTimeout(initTV, 250); _tvLoaded=true; }
+  if(id==='history')  { setTimeout(renderHistory, 50); }
+  if(id==='alerts')   { setTimeout(_ctRenderAlerts, 50); }
   if(id==='portfolio'){ setTimeout(window._ctRefreshPortfolio, 100); }
+  if(id==='calendar') { setTimeout(_ctRenderCalendar, 50); }
 };
 
 // ── TradingView 차트 초기화 ──
@@ -1277,6 +1281,10 @@ function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, 
     var radarHtml = '';
     try { radarHtml = buildRadarScore(aData.indicators, aData.structure); } catch(_){}
 
+    // 변동성 분석
+    var volHtml = '';
+    try { volHtml = buildVolatilityCard(closes, highs, lows, curPrice, function(v){ return formatPrice(v, currency); }); } catch(_){}
+
     // 매크로 신호 (시장 데이터 캐시 활용)
     var macroHtml = '';
     try { macroHtml = buildMacroSignal(_mktCache); } catch(_){}
@@ -1285,6 +1293,7 @@ function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, 
       + (macroHtml ? macroHtml : '')
       + analysis
       + radarHtml
+      + volHtml
       + techSection + quantHtml
       + '<div id="ct-mtf-area"><div style="padding:8px;text-align:center;color:var(--mt);font-size:11px">⏱ 멀티 타임프레임 분석 로드 중...</div></div>'
       + '<div id="ct-fundamental-area"><div style="padding:8px 16px;text-align:center;color:var(--mt);font-size:12px">📋 펀더멘털 불러오는 중...</div></div>'
@@ -4028,21 +4037,22 @@ function buildHero(){
 
 function buildTabBar(){
   var tabs=[
-    {id:'chart',   label:'📈 차트 분석'},
-    {id:'analyze', label:'🔬 상세 입력'},
-    {id:'history', label:'📋 분석 기록'},
+    {id:'chart',    label:'📈 차트 분석'},
+    {id:'analyze',  label:'🔬 상세 입력'},
+    {id:'history',  label:'📋 분석 기록'},
     {id:'portfolio',label:'💼 포트폴리오'},
-    {id:'tools',   label:'🧮 계산 도구'},
-    {id:'screener',label:'🔍 스크리너'},
-    {id:'alerts',  label:'⏰ 알림'},
-    {id:'theory',  label:'📚 이론 가이드'}
+    {id:'tools',    label:'🧮 계산 도구'},
+    {id:'screener', label:'🔍 스크리너'},
+    {id:'calendar', label:'📅 캘린더'},
+    {id:'alerts',   label:'⏰ 알림'},
+    {id:'theory',   label:'📚 이론 가이드'}
   ];
   return '<div class="ct-tab-bar">'
   +tabs.map(function(t){ return '<button class="ct-tab" data-t="'+t.id+'" onclick="window._ctSwitchTab(\''+t.id+'\')">'+t.label+'</button>'; }).join('')
   +'</div>';
 }
 
-function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildHistoryPane()+buildPortfolioPane()+buildToolsPane()+buildScreenerPane()+buildAlertsPane()+buildTheoryPane(); }
+function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildHistoryPane()+buildPortfolioPane()+buildToolsPane()+buildScreenerPane()+buildCalendarPane()+buildAlertsPane()+buildTheoryPane(); }
 
 // ── 차트 탭 ──
 function buildChartPane(){
@@ -4217,11 +4227,17 @@ function buildHistoryPane(){
   // 분석 기록 통계
   +'<div id="ct-hist-stats"></div>'
 
+  // 패턴 분석
+  +'<div id="ct-journal-analysis"></div>'
+
   // 분석 기록
-  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">'
   +'<div style="font-size:15px;font-weight:800;color:var(--tx)">📋 분석 기록</div>'
-  +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:8px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">💾 현재 분석 저장</button>'
-  +'</div>'
+  +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+  +'<button onclick="window._ctExportData()" style="padding:7px 12px;background:transparent;border:1px solid var(--bd);border-radius:8px;color:var(--mt);cursor:pointer;font-size:11px;font-weight:600">📤 내보내기</button>'
+  +'<button onclick="window._ctImportData()" style="padding:7px 12px;background:transparent;border:1px solid var(--bd);border-radius:8px;color:var(--mt);cursor:pointer;font-size:11px;font-weight:600">📥 가져오기</button>'
+  +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:7px 14px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:12px;font-weight:700">💾 현재 분석 저장</button>'
+  +'</div></div>'
   +'<div style="overflow-x:auto">'
   +'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">종목명 클릭 또는 ↺ 버튼으로 계산기에 불러올 수 있습니다.</div>'
   +'<table class="ct-hist-table"><thead><tr>'
@@ -4377,6 +4393,343 @@ window._ctRefreshPortfolio = async function(){
         +'</tr>';
     }).join('')
     +'</tbody></table></div>';
+};
+
+// ══════════════════════════════════════
+// ── 경제 지표 캘린더 ──
+// ══════════════════════════════════════
+function buildCalendarPane(){
+  return '<div class="ct-pane" data-pane="calendar" style="display:none;padding:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📅 경제 지표 & 이벤트 캘린더</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:14px">주요 경제 이벤트까지 남은 일수. 이벤트 전후 변동성 증가에 주의.</div>'
+  +'<div id="ct-cal-content"><div style="color:var(--mt);font-size:12px">로딩 중...</div></div>'
+  +'</div>';
+}
+
+// 경제 캘린더 데이터 (2026년 주요 일정)
+var _CALENDAR_EVENTS = [
+  // FOMC
+  {date:'2026-01-28',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정. 주식·채권·달러에 즉각 영향.'},
+  {date:'2026-03-18',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-05-06',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-06-17',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-07-29',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-09-16',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-11-04',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  {date:'2026-12-16',label:'FOMC 금리 결정',cat:'fomc',impact:'high',desc:'미 연준 기준금리 결정.'},
+  // CPI
+  {date:'2026-01-15',label:'미국 CPI (12월)',cat:'cpi',impact:'high',desc:'소비자물가지수. 인플레이션 지표. 예상 상회 시 금리 인상 압박.'},
+  {date:'2026-02-11',label:'미국 CPI (1월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-03-11',label:'미국 CPI (2월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-04-10',label:'미국 CPI (3월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-05-13',label:'미국 CPI (4월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-06-10',label:'미국 CPI (5월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-07-14',label:'미국 CPI (6월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  {date:'2026-08-12',label:'미국 CPI (7월)',cat:'cpi',impact:'high',desc:'소비자물가지수.'},
+  // 옵션 만기
+  {date:'2026-01-16',label:'미국 옵션 만기 (1월)',cat:'expiry',impact:'medium',desc:'옵션·선물 만기. 변동성 급증 가능. 포지션 주의.'},
+  {date:'2026-02-20',label:'미국 옵션 만기 (2월)',cat:'expiry',impact:'medium',desc:'옵션·선물 만기.'},
+  {date:'2026-03-20',label:'미국 쿼드러플 위칭',cat:'expiry',impact:'high',desc:'주식·ETF·지수 옵션·선물 4중 만기. 연 4회 중 하나. 변동성 극대화.'},
+  {date:'2026-04-17',label:'미국 옵션 만기 (4월)',cat:'expiry',impact:'medium',desc:'옵션·선물 만기.'},
+  {date:'2026-05-15',label:'미국 옵션 만기 (5월)',cat:'expiry',impact:'medium',desc:'옵션·선물 만기.'},
+  {date:'2026-06-19',label:'미국 쿼드러플 위칭',cat:'expiry',impact:'high',desc:'4중 만기. 변동성 극대화.'},
+  // 국내
+  {date:'2026-01-09',label:'한국 금통위 기준금리',cat:'bok',impact:'high',desc:'한국은행 기준금리 결정. KOSPI에 즉각 영향.'},
+  {date:'2026-02-26',label:'한국 금통위 기준금리',cat:'bok',impact:'high',desc:'한국은행 기준금리 결정.'},
+  {date:'2026-04-16',label:'한국 금통위 기준금리',cat:'bok',impact:'high',desc:'한국은행 기준금리 결정.'},
+  {date:'2026-05-28',label:'한국 금통위 기준금리',cat:'bok',impact:'high',desc:'한국은행 기준금리 결정.'},
+  {date:'2026-07-16',label:'한국 금통위 기준금리',cat:'bok',impact:'high',desc:'한국은행 기준금리 결정.'},
+  // 미국 고용
+  {date:'2026-01-09',label:'미국 고용지표 (12월)',cat:'jobs',impact:'high',desc:'비농업 고용자수. 예상 상회 시 달러 강세·채권 약세.'},
+  {date:'2026-02-06',label:'미국 고용지표 (1월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+  {date:'2026-03-06',label:'미국 고용지표 (2월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+  {date:'2026-04-03',label:'미국 고용지표 (3월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+  {date:'2026-05-08',label:'미국 고용지표 (4월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+  {date:'2026-06-05',label:'미국 고용지표 (5월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+  {date:'2026-07-10',label:'미국 고용지표 (6월)',cat:'jobs',impact:'high',desc:'비농업 고용자수.'},
+];
+
+function _ctRenderCalendar(){
+  var el=document.getElementById('ct-cal-content'); if(!el) return;
+  var now=new Date(); now.setHours(0,0,0,0);
+  var today=now.getTime();
+
+  // 오늘 이후 이벤트만, 날짜순 정렬
+  var upcoming=_CALENDAR_EVENTS.map(function(e){
+    var d=new Date(e.date); d.setHours(0,0,0,0);
+    var diff=Math.round((d.getTime()-today)/(86400000));
+    return Object.assign({},e,{diff:diff,dateObj:d});
+  }).filter(function(e){return e.diff>=-3;}).sort(function(a,b){return a.diff-b.diff;});
+
+  var catInfo={
+    fomc: {label:'FOMC',color:'#ef4444',bg:'rgba(239,68,68,.1)'},
+    cpi:  {label:'CPI', color:'#f97316',bg:'rgba(249,115,22,.1)'},
+    expiry:{label:'옵션만기',color:'#a855f7',bg:'rgba(168,85,247,.1)'},
+    bok:  {label:'금통위',color:'#60a5fa',bg:'rgba(96,165,250,.1)'},
+    jobs: {label:'고용',color:'#f59e0b',bg:'rgba(245,158,11,.1)'},
+  };
+
+  // 필터 버튼 상태
+  var selCat=(window._calCat||'all');
+
+  var filtered=selCat==='all'?upcoming:upcoming.filter(function(e){return e.cat===selCat;});
+
+  var html='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
+    +['all','fomc','cpi','jobs','expiry','bok'].map(function(c){
+      var info=catInfo[c]||{label:'전체',color:'#6b7280',bg:'var(--s2)'};
+      var active=selCat===c;
+      return '<button onclick="window._calCat=\''+c+'\';_ctRenderCalendar()" '
+        +'style="padding:5px 12px;border-radius:20px;border:1px solid '+(active?info.color:'var(--bd)')+';background:'+(active?info.bg:'transparent')+';color:'+(active?info.color:'#6b7280')+';font-size:11px;font-weight:'+(active?'800':'400')+';cursor:pointer">'
+        +(c==='all'?'전체':info.label)+'</button>';
+    }).join('')
+    +'</div>';
+
+  // 이벤트 목록
+  html+='<div style="display:flex;flex-direction:column;gap:8px">';
+  filtered.slice(0,20).forEach(function(e){
+    var info=catInfo[e.cat]||{label:'기타',color:'#6b7280',bg:'var(--s2)'};
+    var diffStr=e.diff===0?'<span style="color:#ef4444;font-weight:900">오늘</span>':e.diff<0?Math.abs(e.diff)+'일 전':'D-'+e.diff;
+    var urgentBg=e.diff<=3&&e.diff>=0?'rgba(239,68,68,.05)':'transparent';
+    html+='<div style="padding:12px 16px;background:var(--s2);border-radius:10px;border-left:3px solid '+info.color+';border:1px solid rgba(255,255,255,.06);border-left:3px solid '+info.color+'">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
+      +'<div style="display:flex;align-items:center;gap:8px">'
+      +'<span style="padding:2px 8px;border-radius:10px;background:'+info.bg+';color:'+info.color+';font-size:10px;font-weight:800">'+info.label+'</span>'
+      +(e.impact==='high'?'<span style="font-size:10px;color:#ef4444">🔴 고영향</span>':'<span style="font-size:10px;color:#f59e0b">🟡 중영향</span>')
+      +'</div>'
+      +'<div style="font-size:13px;font-weight:800;color:var(--tx)">'+diffStr+'</div>'
+      +'</div>'
+      +'<div style="font-size:13px;font-weight:700;color:var(--tx);margin-bottom:3px">'+e.label+'</div>'
+      +'<div style="font-size:11px;color:#6b7280;margin-bottom:3px">'+e.date+'</div>'
+      +'<div style="font-size:11px;color:var(--mt);line-height:1.5">'+e.desc+'</div>'
+      +'</div>';
+  });
+  html+='</div>';
+
+  // 이벤트 없으면
+  if(!filtered.length) html+='<div style="text-align:center;padding:20px;color:#6b7280">해당 카테고리의 예정 이벤트가 없습니다.</div>';
+
+  el.innerHTML=html;
+}
+
+// ══════════════════════════════════════
+// ── 변동성 분석 카드 (ATR + 예상 범위 + 스퀴즈) ──
+// ══════════════════════════════════════
+function buildVolatilityCard(closes, highs, lows, curPrice, fp){
+  if(!closes||closes.length<14) return '';
+  var n=closes.length;
+
+  // ATR(14)
+  var trArr=[];
+  for(var i=1;i<n;i++){
+    var tr=Math.max(highs[i]-lows[i], Math.abs(highs[i]-closes[i-1]), Math.abs(lows[i]-closes[i-1]));
+    trArr.push(tr);
+  }
+  var atr14=trArr.slice(-14).reduce(function(a,b){return a+b;},0)/Math.min(14,trArr.length);
+
+  // 볼린저 스퀴즈 감지
+  var avgArr=function(a){ return a.reduce(function(s,x){return s+x;},0)/a.length; };
+  var cl20=closes.slice(-20);
+  var ma20=avgArr(cl20);
+  var std20=Math.sqrt(cl20.reduce(function(s,x){return s+Math.pow(x-ma20,2);},0)/cl20.length);
+  var bbUpper=ma20+2*std20, bbLower=ma20-2*std20;
+  var bw=ma20>0?(bbUpper-bbLower)/ma20*100:0;
+
+  // 과거 20봉 최소 볼린저 폭과 비교 → 스퀴즈 감지
+  var cl40=closes.slice(-40);
+  var bwHist=[];
+  for(var i=20;i<=cl40.length;i++){
+    var sl=cl40.slice(i-20,i);
+    var m=avgArr(sl);
+    var s=Math.sqrt(sl.reduce(function(a,x){return a+Math.pow(x-m,2);},0)/sl.length);
+    bwHist.push(m>0?(m+2*s-(m-2*s))/m*100:0);
+  }
+  var minBw=bwHist.length?Math.min.apply(null,bwHist):bw;
+  var isSqueeze=bw<=minBw*1.1&&bw<8;
+
+  // 예상 일간 범위 (1σ: 68% 확률)
+  var rets=[];
+  for(var i=1;i<n;i++) rets.push((closes[i]-closes[i-1])/closes[i-1]);
+  var meanR=rets.reduce(function(a,b){return a+b;},0)/rets.length;
+  var stdR=Math.sqrt(rets.reduce(function(a,b){return a+Math.pow(b-meanR,2);},0)/rets.length);
+  var daily1s=curPrice*stdR, daily2s=curPrice*stdR*2;
+
+  // ATR 레벨
+  var atrLow=curPrice-atr14, atrHigh=curPrice+atr14;
+  var atrPct=curPrice>0?atr14/curPrice*100:0;
+
+  var sqC=isSqueeze?'#f59e0b':'#22c55e';
+  var sqLabel=isSqueeze?'볼린저 스퀴즈 감지 — 이탈 임박':'정상 변동성';
+
+  return '<div style="margin:12px 0;background:var(--bg);border:1px solid var(--bd);border-radius:14px;overflow:hidden">'
+  +'<div style="padding:10px 16px;background:var(--s1);border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between">'
+  +'<div style="font-size:14px;font-weight:800;color:var(--tx)">📊 변동성 분석</div>'
+  +'<div style="padding:3px 10px;border-radius:20px;background:'+sqC+'22;border:1px solid '+sqC+';font-size:11px;color:'+sqC+';font-weight:700">'+sqLabel+'</div>'
+  +'</div>'
+  +'<div style="padding:14px 16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">'
+  +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+  +'<div style="font-size:10px;color:#6b7280;margin-bottom:3px">ATR(14) 일평균 변동폭</div>'
+  +'<div style="font-size:16px;font-weight:900;color:#f59e0b">'+fp(Math.round(atr14))+'</div>'
+  +'<div style="font-size:10px;color:#6b7280">현재가 대비 '+atrPct.toFixed(1)+'%</div>'
+  +'</div>'
+  +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+  +'<div style="font-size:10px;color:#6b7280;margin-bottom:3px">내일 예상 범위 (68%)</div>'
+  +'<div style="font-size:13px;font-weight:800;color:var(--tx)">'+fp(Math.round(curPrice-daily1s))+' ~ '+fp(Math.round(curPrice+daily1s))+'</div>'
+  +'<div style="font-size:10px;color:#6b7280">±'+daily1s.toFixed(curPrice<100?2:0)+(curPrice<1000?'':' (±'+(stdR*100).toFixed(1)+'%)')+'</div>'
+  +'</div>'
+  +'<div style="padding:10px;background:rgba(245,158,11,.08);border-radius:8px;border:1px solid rgba(245,158,11,.2)">'
+  +'<div style="font-size:10px;color:#f59e0b;margin-bottom:3px">ATR 기반 손절 (1.5x)</div>'
+  +'<div style="font-size:13px;font-weight:800;color:#ef4444">'+fp(Math.round(curPrice-atr14*1.5))+'</div>'
+  +'<div style="font-size:10px;color:#6b7280">현재 -'+( atr14*1.5/curPrice*100).toFixed(1)+'%</div>'
+  +'</div>'
+  +'</div>'
+  +'<div style="padding:0 16px 12px">'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:5px">볼린저 밴드 폭 '+bw.toFixed(1)+'% '+(isSqueeze?'(최저 수준 — 이탈 방향 주목)':'(정상)')+'</div>'
+  +'<div style="height:8px;background:var(--s2);border-radius:4px;overflow:hidden">'
+  +'<div style="height:100%;width:'+Math.min(bw/30*100,100)+'%;background:'+(isSqueeze?'#f59e0b':'#22c55e')+';border-radius:4px;transition:width .4s"></div>'
+  +'</div>'
+  +'</div></div>';
+}
+
+// ══════════════════════════════════════
+// ── 매매 일지 패턴 분석 ──
+// ══════════════════════════════════════
+function buildJournalAnalysis(hist){
+  if(!hist||hist.length<3) return '';
+  var done=hist.filter(function(h){return h.result==='성공'||h.result==='실패';});
+  if(!done.length) return '';
+
+  // 구조별 승률
+  var byStruct={};
+  done.forEach(function(h){
+    var k=h.struct||'미분류';
+    if(!byStruct[k]) byStruct[k]={w:0,l:0};
+    if(h.result==='성공') byStruct[k].w++; else byStruct[k].l++;
+  });
+
+  // 월별 승률
+  var byMonth={};
+  done.forEach(function(h){
+    var k=(h.date||'').slice(0,7)||'미상';
+    if(!byMonth[k]) byMonth[k]={w:0,l:0};
+    if(h.result==='성공') byMonth[k].w++; else byMonth[k].l++;
+  });
+
+  // 최고 수익·최악 손실 (청산가 있는 경우)
+  var withExit=hist.filter(function(h){return h.exitPrice&&h.price;});
+  withExit.sort(function(a,b){return (b.exitPrice-b.price)/b.price-(a.exitPrice-a.price)/a.price;});
+  var best=withExit[0], worst=withExit[withExit.length-1];
+
+  var html='<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:14px">'
+  +'<div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:14px">📊 매매 패턴 분석</div>';
+
+  // 구조별 승률
+  html+='<div style="margin-bottom:14px">'
+  +'<div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px">구조별 승률</div>'
+  +'<div style="display:flex;flex-direction:column;gap:6px">'
+  +Object.keys(byStruct).map(function(k){
+    var d=byStruct[k]; var t=d.w+d.l; var wr=Math.round(d.w/t*100);
+    var c=wr>=60?'#22c55e':wr>=40?'#f59e0b':'#ef4444';
+    return '<div style="display:flex;align-items:center;gap:10px">'
+      +'<div style="font-size:12px;color:var(--tx);min-width:60px">'+k+'</div>'
+      +'<div style="flex:1;height:8px;background:var(--s2);border-radius:4px;overflow:hidden">'
+      +'<div style="height:100%;width:'+wr+'%;background:'+c+';border-radius:4px"></div></div>'
+      +'<div style="font-size:12px;font-weight:700;color:'+c+'">'+wr+'% ('+d.w+'/'+t+')</div>'
+      +'</div>';
+  }).join('')
+  +'</div></div>';
+
+  // 최고·최악 트레이드
+  if(best||worst){
+    html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">';
+    if(best){
+      var bp=Math.round((best.exitPrice-best.price)/best.price*100*10)/10;
+      html+='<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)">'
+        +'<div style="font-size:10px;color:#22c55e;margin-bottom:3px">🏆 최고 수익</div>'
+        +'<div style="font-size:14px;font-weight:900;color:var(--tx)">'+best.sym+'</div>'
+        +'<div style="font-size:18px;font-weight:900;color:#22c55e">+'+ bp+'%</div>'
+        +'<div style="font-size:10px;color:#6b7280">'+best.date+'</div></div>';
+    }
+    if(worst){
+      var wp=Math.round((worst.exitPrice-worst.price)/worst.price*100*10)/10;
+      html+='<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)">'
+        +'<div style="font-size:10px;color:#ef4444;margin-bottom:3px">📉 최대 손실</div>'
+        +'<div style="font-size:14px;font-weight:900;color:var(--tx)">'+worst.sym+'</div>'
+        +'<div style="font-size:18px;font-weight:900;color:#ef4444">'+(wp>=0?'+':'')+wp+'%</div>'
+        +'<div style="font-size:10px;color:#6b7280">'+worst.date+'</div></div>';
+    }
+    html+='</div>';
+  }
+
+  // 월별 추이 (최근 6개월)
+  var months=Object.keys(byMonth).sort().slice(-6);
+  if(months.length>=2){
+    html+='<div><div style="font-size:12px;font-weight:700;color:#6b7280;margin-bottom:8px">월별 승률 추이</div>'
+    +'<div style="display:flex;gap:6px;align-items:flex-end">'
+    +months.map(function(m){
+      var d=byMonth[m]; var t=d.w+d.l; var wr=Math.round(d.w/t*100);
+      var c=wr>=60?'#22c55e':wr>=40?'#f59e0b':'#ef4444';
+      return '<div style="flex:1;text-align:center">'
+        +'<div style="font-size:10px;color:'+c+';font-weight:700;margin-bottom:3px">'+wr+'%</div>'
+        +'<div style="height:'+(Math.max(wr,10))+'px;background:'+c+';border-radius:3px 3px 0 0;opacity:.8"></div>'
+        +'<div style="font-size:9px;color:#4b5563;margin-top:3px">'+m.slice(5)+'월</div>'
+        +'</div>';
+    }).join('')
+    +'</div></div>';
+  }
+
+  html+='</div>';
+  return html;
+}
+
+// ══════════════════════════════════════
+// ── 데이터 백업 (내보내기/가져오기) ──
+// ══════════════════════════════════════
+window._ctExportData = function(){
+  var data={
+    hist:    JSON.parse(localStorage.getItem('ct_hist')||'[]'),
+    favs:    JSON.parse(localStorage.getItem('ct_favs')||'[]'),
+    recent:  JSON.parse(localStorage.getItem('ct_recent')||'[]'),
+    alerts:  JSON.parse(localStorage.getItem('ct_alerts')||'[]'),
+    portfolio: JSON.parse(localStorage.getItem('ct_pf')||'[]'),
+    exportedAt: new Date().toISOString(),
+    version: 3
+  };
+  var json=JSON.stringify(data,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url; a.download='차트분석_백업_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(url);
+};
+
+window._ctImportData = function(){
+  var inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange=function(e){
+    var file=e.target.files[0]; if(!file) return;
+    var reader=new FileReader();
+    reader.onload=function(ev){
+      try {
+        var d=JSON.parse(ev.target.result);
+        if(!d.version) throw new Error('형식 불일치');
+        var ok=confirm('가져오면 현재 데이터에 병합됩니다. 계속하시겠습니까?\n분석 기록: '+( d.hist&&d.hist.length||0)+'건\n즐겨찾기: '+(d.favs&&d.favs.length||0)+'개\n알림: '+(d.alerts&&d.alerts.length||0)+'개');
+        if(!ok) return;
+        // 병합 (id 기반 중복 제거)
+        if(d.hist){
+          var cur=JSON.parse(localStorage.getItem('ct_hist')||'[]');
+          var curIds=new Set(cur.map(function(h){return h.id;}));
+          var merged=cur.concat(d.hist.filter(function(h){return !curIds.has(h.id);}));
+          localStorage.setItem('ct_hist', JSON.stringify(merged));
+        }
+        if(d.favs) localStorage.setItem('ct_favs', JSON.stringify(d.favs));
+        if(d.alerts) localStorage.setItem('ct_alerts', JSON.stringify(d.alerts));
+        if(d.portfolio) localStorage.setItem('ct_pf', JSON.stringify(d.portfolio));
+        alert('가져오기 완료!');
+        renderHistory();
+      } catch(ex){ alert('파일 형식 오류: '+ex.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
 };
 
 // ══════════════════════════════════════
