@@ -29,6 +29,7 @@ export default {
       if (url.pathname === '/api/quote')       return await handleQuote(url);
       if (url.pathname === '/api/news')        return await handleNews(url);
       if (url.pathname === '/api/fundamental') return await handleFundamental(url);
+      if (url.pathname === '/api/market')      return await handleMarket();
     } catch (err) {
       return jsonResp({ error: String(err) }, 500);
     }
@@ -68,6 +69,40 @@ async function handleNews(url) {
     });
   }
   return jsonResp({ news: [] });
+}
+
+// ── 시장 현황 (주요 지수/자산 일괄 조회) ──
+async function handleMarket() {
+  const SYMS = [
+    {sym:'^GSPC',  label:'S&P500',  cat:'index'},
+    {sym:'^IXIC',  label:'NASDAQ',  cat:'index'},
+    {sym:'^KS11',  label:'KOSPI',   cat:'index'},
+    {sym:'^KQ11',  label:'코스닥',   cat:'index'},
+    {sym:'^VIX',   label:'VIX',     cat:'fear'},
+    {sym:'GLD',    label:'금',       cat:'commodity'},
+    {sym:'CL=F',   label:'WTI유가', cat:'commodity'},
+    {sym:'BTC-USD',label:'BTC',     cat:'crypto'},
+    {sym:'DX-Y.NYB',label:'달러지수',cat:'fx'},
+    {sym:'USDKRW=X',label:'원/달러',cat:'fx'},
+  ];
+
+  const results = await Promise.all(SYMS.map(async function(item) {
+    try {
+      const data = await yfetch('/v8/finance/chart/' + encodeURIComponent(item.sym) + '?interval=1d&range=5d&includePrePost=false');
+      if (data && data.chart && data.chart.result && data.chart.result[0]) {
+        const r = data.chart.result[0];
+        const m = r.meta;
+        const closes = r.indicators.quote[0].close.filter(v => v != null);
+        const prev = closes.length >= 2 ? closes[closes.length - 2] : m.chartPreviousClose;
+        const cur  = m.regularMarketPrice || closes[closes.length - 1];
+        const chg  = prev && prev > 0 ? (cur - prev) / prev * 100 : 0;
+        return { ...item, price: cur, chg: Math.round(chg * 100) / 100, prev, currency: m.currency };
+      }
+    } catch (_) {}
+    return { ...item, price: null, chg: null };
+  }));
+
+  return jsonResp({ items: results, ts: Date.now() }, 200, 180); // 3분 캐시
 }
 
 async function handleFundamental(url) {
@@ -199,9 +234,10 @@ function sanitize(raw) {
   return (raw || '').replace(/[^A-Z0-9.\-\^]/gi, '').slice(0, 20);
 }
 
-function jsonResp(data, status) {
+function jsonResp(data, status, maxAge) {
+  var age = maxAge !== undefined ? maxAge : (status && status !== 200 ? 0 : 300);
   return new Response(JSON.stringify(data), {
     status: status || 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': (status && status !== 200) ? 'no-store' : 'public, max-age=300' },
+    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Cache-Control': age ? 'public, max-age='+age : 'no-store' },
   });
 }
