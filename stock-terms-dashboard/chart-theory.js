@@ -303,18 +303,66 @@ function initTV(){
   var container = document.getElementById('ct-tv-box');
   if(!container) return;
   container.innerHTML = '';
-  var s = document.createElement('script');
-  s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
-  s.async = true;
-  s.textContent = JSON.stringify({
-    autosize:true, symbol:_ctSymbol, interval:_ctInterval,
-    timezone:'Asia/Seoul', theme:isDark?'dark':'light',
-    style:'1', locale:'kr', withdateranges:true,
-    hide_side_toolbar:false, allow_symbol_change:true,
-    details:true, support_host:'https://www.tradingview.com'
-  });
-  container.appendChild(s);
+
+  var isKorean = /^KRX:\d{5,6}$/.test(_ctSymbol);
+
+  // 한국주식일 때 로그인 배너 표시
+  if(isKorean){
+    var banner = document.createElement('div');
+    banner.id = 'ct-tv-login-banner';
+    banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;'
+      +'padding:8px 14px;background:#1e3a5f;border-bottom:1px solid #2d5a9e;font-size:12px;flex-shrink:0';
+    banner.innerHTML = '<span style="color:#93c5fd">🔑 한국주식 차트는 TradingView 로그인 후 표시됩니다</span>'
+      +'<div style="display:flex;gap:8px">'
+      +'<a href="https://www.tradingview.com/accounts/signin/" target="_blank" '
+      +'style="padding:5px 12px;background:#3b82f6;color:#fff;border-radius:6px;text-decoration:none;font-weight:700;font-size:12px">로그인</a>'
+      +'<a href="https://www.tradingview.com/accounts/signup/" target="_blank" '
+      +'style="padding:5px 12px;background:transparent;color:#93c5fd;border:1px solid #2d5a9e;border-radius:6px;text-decoration:none;font-weight:600;font-size:12px">무료 가입</a>'
+      +'<button onclick="window._ctRefreshTV()" '
+      +'style="padding:5px 12px;background:transparent;color:#6b7280;border:1px solid var(--bd);border-radius:6px;cursor:pointer;font-size:12px">로그인 후 새로고침 ↺</button>'
+      +'</div>';
+
+    var chartWrap = document.createElement('div');
+    chartWrap.style.cssText = 'flex:1;overflow:hidden';
+
+    var tvScript = document.createElement('script');
+    tvScript.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    tvScript.async = true;
+    tvScript.textContent = JSON.stringify({
+      autosize:true, symbol:_ctSymbol, interval:_ctInterval,
+      timezone:'Asia/Seoul', theme:isDark?'dark':'light',
+      style:'1', locale:'kr', withdateranges:true,
+      hide_side_toolbar:false, allow_symbol_change:true,
+      details:true, support_host:'https://www.tradingview.com'
+    });
+    chartWrap.appendChild(tvScript);
+
+    var wrapper = document.createElement('div');
+    wrapper.style.cssText = 'height:100%;display:flex;flex-direction:column';
+    wrapper.appendChild(banner);
+    wrapper.appendChild(chartWrap);
+    container.appendChild(wrapper);
+  } else {
+    var s = document.createElement('script');
+    s.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
+    s.async = true;
+    s.textContent = JSON.stringify({
+      autosize:true, symbol:_ctSymbol, interval:_ctInterval,
+      timezone:'Asia/Seoul', theme:isDark?'dark':'light',
+      style:'1', locale:'kr', withdateranges:true,
+      hide_side_toolbar:false, allow_symbol_change:true,
+      details:true, support_host:'https://www.tradingview.com'
+    });
+    container.appendChild(s);
+  }
 }
+
+// 로그인 후 차트 새로고침
+window._ctRefreshTV = function(){
+  _tvLoaded = false;
+  initTV();
+  _tvLoaded = true;
+};
 
 // ── 심볼 변경 ──
 window._ctChangeSymbol = function(){
