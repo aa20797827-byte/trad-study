@@ -15,6 +15,8 @@ window.showChart = function(){
   _tvLoaded = false;
   wrap.innerHTML = buildCSS() + buildHero() + buildTabBar() + buildTabContent();
   window._ctSwitchTab('chart');
+  // 즐겨찾기·최근 검색 렌더링
+  setTimeout(function(){ try { _ctRenderFavRecent(); } catch(_){} }, 100);
   // 기본 종목 자동 분석 실행
   setTimeout(function(){
     window._ctAutoFill(_ctSymbol);
@@ -91,12 +93,40 @@ window._ctDeleteHistory = function(id){
   renderHistory();
 };
 
+// 분석 통계
+function _ctRenderStats(hist){
+  var el=document.getElementById('ct-hist-stats');
+  if(!el) return;
+  if(!hist.length){ el.innerHTML=''; return; }
+  var total=hist.length;
+  var done=hist.filter(function(h){return h.result==='성공'||h.result==='실패';});
+  var wins=hist.filter(function(h){return h.result==='성공';}).length;
+  var loses=hist.filter(function(h){return h.result==='실패';}).length;
+  var holding=hist.filter(function(h){return h.result==='보유중';}).length;
+  var wr=done.length?Math.round(wins/done.length*100):null;
+  el.innerHTML='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">'
+    +'<div style="padding:10px;background:var(--s2);border-radius:10px;text-align:center">'
+    +'<div style="font-size:10px;color:#6b7280;margin-bottom:4px">총 분석</div>'
+    +'<div style="font-size:20px;font-weight:900;color:var(--tx)">'+total+'</div></div>'
+    +(wr!==null?'<div style="padding:10px;background:var(--s2);border-radius:10px;text-align:center">'
+    +'<div style="font-size:10px;color:#6b7280;margin-bottom:4px">승률</div>'
+    +'<div style="font-size:20px;font-weight:900;color:'+(wr>=55?'#22c55e':wr>=40?'#f59e0b':'#ef4444')+'">'+wr+'%</div></div>':'')
+    +'<div style="padding:10px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.2);border-radius:10px;text-align:center">'
+    +'<div style="font-size:10px;color:#22c55e;margin-bottom:4px">성공</div>'
+    +'<div style="font-size:20px;font-weight:900;color:#22c55e">'+wins+'</div></div>'
+    +'<div style="padding:10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:10px;text-align:center">'
+    +'<div style="font-size:10px;color:#ef4444;margin-bottom:4px">실패</div>'
+    +'<div style="font-size:20px;font-weight:900;color:#ef4444">'+loses+'</div></div>'
+    +'</div>';
+}
+
 // 기록 렌더링
 function renderHistory(){
   var el = document.getElementById('ct-hist-body');
   if(!el) return;
   var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
-  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; return; }
+  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; _ctRenderStats([]); return; }
+  _ctRenderStats(hist);
   el.innerHTML = hist.map(function(h){
     var rC = h.result==='성공'?'#22c55e':h.result==='실패'?'#ef4444':'#6b7280';
     return '<tr>'
@@ -132,11 +162,20 @@ window._ctCalcPosition = function(){
 
   if(!account||!entry){ res.innerHTML='<span style="color:#6b7280">계좌 크기와 진입가를 입력하세요</span>'; return; }
 
+  var feePct = parseFloat((document.getElementById('ct-calc-fee')||{}).value)||0.015;
+  var taxPct = parseFloat((document.getElementById('ct-calc-tax')||{}).value)||0;
+  var fee = feePct/100; var tax = taxPct/100;
+
   var investAmt = Math.round(account * pct / 100);
   var shares = entry>0 ? Math.floor(investAmt/entry) : 0;
   var actualInvest = shares * entry;
-  var riskAmt = stop>0&&shares>0 ? Math.round(shares * Math.abs(entry-stop)) : 0;
-  var profitAmt = target>0&&shares>0 ? Math.round(shares * Math.abs(target-entry)) : 0;
+  var buyCost = Math.round(actualInvest * fee);
+  var sellFeeAtStop = stop>0 ? Math.round(shares*stop*(fee+tax)) : 0;
+  var sellFeeAtTgt = target>0 ? Math.round(shares*target*(fee+tax)) : 0;
+  var totalCost = buyCost + sellFeeAtTgt;
+
+  var riskAmt = stop>0&&shares>0 ? Math.round(shares * Math.abs(entry-stop)) + buyCost + sellFeeAtStop : 0;
+  var profitAmt = target>0&&shares>0 ? Math.round(shares * Math.abs(target-entry)) - buyCost - sellFeeAtTgt : 0;
   var riskPct = account>0 ? Math.round(riskAmt/account*100*10)/10 : 0;
   var fp2 = function(v){ return cur==='USD'?'$'+(v/1).toLocaleString('en-US',{minimumFractionDigits:0}):v.toLocaleString()+'원'; };
 
@@ -144,10 +183,11 @@ window._ctCalcPosition = function(){
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
     +'<div style="padding:10px;background:var(--s2);border-radius:8px"><div style="font-size:10px;color:#6b7280">투자금액</div><div style="font-size:16px;font-weight:800;color:var(--tx)">'+fp2(actualInvest)+'</div><div style="font-size:10px;color:#6b7280">계좌의 '+pct+'%</div></div>'
     +'<div style="padding:10px;background:var(--s2);border-radius:8px"><div style="font-size:10px;color:#6b7280">매수 수량</div><div style="font-size:16px;font-weight:800;color:var(--tx)">'+shares.toLocaleString()+'주</div><div style="font-size:10px;color:#6b7280">@ '+fp2(entry)+'</div></div>'
-    +(stop?'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)"><div style="font-size:10px;color:#ef4444">최대 손실</div><div style="font-size:16px;font-weight:800;color:#ef4444">'+fp2(riskAmt)+'</div><div style="font-size:10px;color:#6b7280">계좌의 '+riskPct+'%</div></div>':'')
-    +(target&&stop?'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)"><div style="font-size:10px;color:#22c55e">예상 수익</div><div style="font-size:16px;font-weight:800;color:#22c55e">'+fp2(profitAmt)+'</div><div style="font-size:10px;color:#6b7280">R:R 1:'+Math.round(profitAmt/(riskAmt||1)*10)/10+'</div></div>':'')
+    +(stop?'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)"><div style="font-size:10px;color:#ef4444">최대 손실 (수수료포함)</div><div style="font-size:16px;font-weight:800;color:#ef4444">'+fp2(riskAmt)+'</div><div style="font-size:10px;color:#6b7280">계좌의 '+riskPct+'%</div></div>':'')
+    +(target&&stop?'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)"><div style="font-size:10px;color:#22c55e">순수익 (세금·수수료후)</div><div style="font-size:16px;font-weight:800;color:#22c55e">'+fp2(profitAmt)+'</div><div style="font-size:10px;color:#6b7280">R:R 1:'+Math.round(profitAmt/(riskAmt||1)*10)/10+'</div></div>':'')
     +'</div>'
-    +(riskPct>5?'<div style="margin-top:8px;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;font-size:11px;color:#ef4444">⚠ 최대 손실이 계좌의 '+riskPct+'%입니다. 통상 1~2% 이하 권장.</div>':'');
+    +(totalCost>0?'<div style="margin-top:8px;font-size:11px;color:#6b7280">💸 총 수수료+세금 예상: <b style="color:var(--tx)">'+fp2(totalCost)+'</b></div>':'')
+    +(riskPct>5?'<div style="margin-top:6px;padding:8px 10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);border-radius:6px;font-size:11px;color:#ef4444">⚠ 최대 손실이 계좌의 '+riskPct+'%입니다. 통상 1~2% 이하 권장.</div>':'');
 };
 
 // ══════════════════════════════════════
@@ -283,12 +323,13 @@ function _ctHideSuggest(){
 }
 
 window._ctSelectSym = function(code){
-  // 입력창 업데이트
   var inp=document.getElementById('ct-sym-input');
   if(inp) inp.value=code;
   _ctHideSuggest();
 
-  // 코드를 직접 처리 (입력창 재조회 불필요)
+  // 최근 검색 기록 저장
+  _ctAddRecent(code);
+
   var tvSym = /^\d+$/.test(code) ? 'KRX:'+code : code.toUpperCase();
   _ctSymbol = tvSym;
   _tvLoaded = false;
@@ -303,6 +344,67 @@ window._ctSelectSym = function(code){
   window._ctAutoFill(tvSym);
   window._ctAutoAnalyze(tvSym);
 };
+
+// ── 즐겨찾기 ──
+function _ctGetFavs(){ return JSON.parse(localStorage.getItem('ct_favs')||'[]'); }
+function _ctSaveFavs(arr){ localStorage.setItem('ct_favs', JSON.stringify(arr)); }
+window._ctToggleFav = function(sym){
+  var favs=_ctGetFavs();
+  var idx=favs.findIndex(function(f){ return f.sym===sym; });
+  if(idx>=0){ favs.splice(idx,1); } else {
+    var label=sym;
+    // 한국주식이면 코드로 이름 조회
+    if(/^\d{5,6}$/.test(sym)){
+      var found=_KR_DICT.find(function(e){ return e[0]===sym; });
+      if(found) label=found[1];
+    }
+    favs.unshift({sym:sym, label:label, ts:Date.now()});
+    if(favs.length>20) favs=favs.slice(0,20);
+  }
+  _ctSaveFavs(favs);
+  _ctRenderFavRecent();
+};
+window._ctIsFav = function(sym){ return _ctGetFavs().some(function(f){ return f.sym===sym; }); };
+
+// ── 최근 검색 ──
+function _ctGetRecent(){ return JSON.parse(localStorage.getItem('ct_recent')||'[]'); }
+function _ctAddRecent(sym){
+  var list=_ctGetRecent().filter(function(s){ return s!==sym; });
+  list.unshift(sym);
+  localStorage.setItem('ct_recent', JSON.stringify(list.slice(0,10)));
+  _ctRenderFavRecent();
+}
+
+function _ctRenderFavRecent(){
+  var el=document.getElementById('ct-fav-recent');
+  if(!el) return;
+  var favs=_ctGetFavs();
+  var recent=_ctGetRecent();
+  var chips=[];
+
+  // 즐겨찾기 먼저
+  favs.slice(0,5).forEach(function(f){
+    chips.push('<button onclick="window._ctSelectSym(\''+f.sym+'\')" '
+      +'style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);border-radius:20px;color:#f59e0b;font-size:11px;cursor:pointer;font-weight:700">'
+      +'★ '+f.label+'</button>');
+  });
+  // 최근 검색 (즐겨찾기에 없는 것만)
+  var favSyms=favs.map(function(f){return f.sym;});
+  recent.filter(function(s){ return favSyms.indexOf(s)<0; }).slice(0,5).forEach(function(s){
+    var label=s;
+    if(/^\d{5,6}$/.test(s)){ var found=_KR_DICT.find(function(e){return e[0]===s;}); if(found) label=found[1]; }
+    chips.push('<button onclick="window._ctSelectSym(\''+s+'\')" '
+      +'style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:var(--s2);border:1px solid var(--bd);border-radius:20px;color:var(--mt);font-size:11px;cursor:pointer">'
+      +'🕐 '+label+'</button>');
+  });
+
+  el.innerHTML = chips.length
+    ? '<div style="display:flex;flex-wrap:wrap;gap:5px;padding:6px 0 2px">'
+      +'<div style="font-size:10px;color:#4b5563;align-self:center;margin-right:2px">즐겨찾기·최근:</div>'
+      +chips.join('')
+      +'</div>'
+    : '';
+}
 
 // 외부 클릭 시 드롭다운 닫기
 document.addEventListener('click', function(e){
@@ -1078,6 +1180,7 @@ function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, 
       + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
 
     try { fillForm(aData); } catch(_){}
+    try { _ctAutoCheckList(aData); } catch(_){}
 
     fetchNews(ticker).then(function(news){
       var el=document.getElementById('ct-news-area');
@@ -1110,6 +1213,7 @@ window._ctAutoAnalyze = async function(symbol){
         + generateAnalysis(aData);
       out.innerHTML = tvHtml + '<div id="ct-news-area"><div style="padding:10px;text-align:center;color:var(--mt);font-size:12px">📰 뉴스 불러오는 중...</div></div>';
       fillForm(aData);
+      try { _ctAutoCheckList(aData); } catch(_){}
       fetchNews(ticker).then(function(news){
         var el=document.getElementById('ct-news-area');
         if(el) el.innerHTML = buildNewsCard(news, ticker);
@@ -1286,6 +1390,31 @@ function _ctCopyFallback(text){
   document.body.appendChild(ta); ta.select();
   try{document.execCommand('copy');}catch(_){}
   document.body.removeChild(ta);
+}
+
+// ── 분석 결과 기반 체크리스트 자동체크 ──
+function _ctAutoCheckList(aData){
+  // 분석 데이터에서 체크 조건 평가
+  var checks = [
+    !!(aData.boxUpper||aData.boxLower||aData.dojiUpper||aData.dojiLower),  // 박스/도지 구간
+    !!(aData.frame),                                                         // 기능선 格
+    !!(aData.volLevel==='high'||aData.volContext==='breakout'),             // 거래량 동반
+    true,                                                                    // 손절가 (항상 true — 사용자 판단)
+    false,                                                                   // 진입 근거 기록 (체크 불가)
+    !!(aData.retest==='done'),                                              // 리테스트 완료
+    !!(aData.boxLower&&aData.dojiLower&&Math.abs(aData.boxLower-aData.dojiLower)>0),  // 2차 매수 다른 가격
+    false                                                                    // R:R (자동으로 계산됨, 사용자 확인 필요)
+  ];
+
+  // 체크리스트 컨테이너 내 체크박스 찾기 (지연 후 시도)
+  setTimeout(function(){
+    var clEl = document.getElementById('ct-auto-output');
+    if(!clEl) return;
+    var boxes = clEl.querySelectorAll('input[type="checkbox"]');
+    boxes.forEach(function(cb, i){
+      if(checks[i]) cb.checked = true;
+    });
+  }, 150);
 }
 
 // 에러 화면에서 직접 입력 분석
@@ -3086,12 +3215,12 @@ function buildChartPane(){
   return '<div class="ct-pane" data-pane="chart" style="display:none">'
 
   // 심볼 바
-  +'<div class="ct-sym-bar" style="margin-bottom:10px;position:relative">'
+  +'<div style="margin-bottom:6px;position:relative">'
+  +'<div class="ct-sym-bar" style="position:relative">'
   +'<div style="position:relative;flex:1">'
   +'<input id="ct-sym-input" class="ct-sym-in" style="width:100%" placeholder="종목명 또는 코드 (삼성전자, 하이닉스, 005930, AAPL)" value="005930"'
   +' oninput="window._ctSearchInput(this.value)"'
   +' onkeydown="if(event.key===\'Enter\'){window._ctHideSuggest();window._ctChangeSymbol();}">'
-  // 자동완성 드롭다운
   +'<div id="ct-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;'
   +'background:var(--s1);border:1.5px solid var(--ac);border-top:none;border-radius:0 0 10px 10px;'
   +'max-height:320px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.4)"></div>'
@@ -3101,6 +3230,11 @@ function buildChartPane(){
   +'<option value="D" selected>일봉</option><option value="W">주봉</option><option value="M">월봉</option>'
   +'</select>'
   +'<button class="ct-sym-btn" onclick="window._ctChangeSymbol()">분석</button>'
+  +'<button onclick="window._ctToggleFav((_ctSymbol||\'005930\').replace(\'KRX:\',\'\'))" '
+  +'style="padding:0 10px;background:transparent;border:1px solid var(--bd);border-radius:8px;color:#f59e0b;cursor:pointer;font-size:16px;flex-shrink:0" '
+  +'title="즐겨찾기 추가/제거">★</button>'
+  +'</div>'
+  +'<div id="ct-fav-recent"></div>'
   +'</div>'
 
   // PC: 2열 레이아웃 (차트 왼쪽 | 분석 오른쪽)
@@ -3228,8 +3362,21 @@ function buildHistoryPane(){
   +'<div><div style="font-size:11px;color:#60a5fa;margin-bottom:4px">🎯 1차 익절가</div>'
   +'<input id="ct-calc-target" class="ct-input" type="number" placeholder="익절가" oninput="window._ctCalcPosition()"></div>'
   +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💸 수수료율 (%)</div>'
+  +'<input id="ct-calc-fee" class="ct-input" type="number" value="0.015" step="0.001" min="0" oninput="window._ctCalcPosition()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">📋 세금 설정</div>'
+  +'<select id="ct-calc-tax" class="ct-input" onchange="window._ctCalcPosition()">'
+  +'<option value="0.18">🇰🇷 국내주식 (0.18%)</option>'
+  +'<option value="0">🇺🇸 미국주식 (없음)</option>'
+  +'<option value="0.1">ETF (0.1%)</option>'
+  +'</select></div>'
+  +'</div>'
   +'<div id="ct-calc-result" style="font-size:13px;color:#6b7280">계좌 크기와 진입가를 입력하면 자동 계산됩니다.</div>'
   +'</div>'
+
+  // 분석 기록 통계
+  +'<div id="ct-hist-stats"></div>'
 
   // 분석 기록
   +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">'
