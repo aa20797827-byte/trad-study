@@ -42,16 +42,20 @@ export default {
 };
 
 async function handleQuote(url) {
-  const sym = sanitize(url.searchParams.get('symbol'));
+  const sym      = sanitize(url.searchParams.get('symbol'));
   if (!sym) return jsonResp({ error: 'symbol_missing' }, 400);
+  const interval = (['1d','1wk','1mo'].includes(url.searchParams.get('interval'))) ? url.searchParams.get('interval') : '1d';
+  const range    = (['1mo','3mo','6mo','1y','2y','5y'].includes(url.searchParams.get('range'))) ? url.searchParams.get('range') : '6mo';
 
-  const yahoo = await yfetch('/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&range=6mo&includePrePost=false');
+  const yahoo = await yfetch('/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=' + interval + '&range=' + range + '&includePrePost=false');
   if (yahoo && yahoo.chart && yahoo.chart.result && yahoo.chart.result[0]) {
     return jsonResp(yahoo);
   }
 
-  const stooq = await fetchStooq(sym);
-  if (stooq) return jsonResp(stooq);
+  if (interval === '1d') {
+    const stooq = await fetchStooq(sym);
+    if (stooq) return jsonResp(stooq);
+  }
 
   return jsonResp({ error: 'all_failed' }, 502);
 }
