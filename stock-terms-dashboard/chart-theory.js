@@ -1285,12 +1285,17 @@ function _showAnalysis(out, ticker, closes, opens, highs, lows, vols, curPrice, 
     var volHtml = '';
     try { volHtml = buildVolatilityCard(closes, highs, lows, curPrice, function(v){ return formatPrice(v, currency); }); } catch(_){}
 
-    // 매크로 신호 (시장 데이터 캐시 활용)
-    var macroHtml = '';
+    // 매크로 신호 + 공황/탐욕 지수
+    var macroHtml = '', fgHtml = '', miniChartHtml = '';
     try { macroHtml = buildMacroSignal(_mktCache); } catch(_){}
+    try { fgHtml = buildFearGreedCard(_mktCache); } catch(_){}
+    // SVG 미니 차트
+    try { miniChartHtml = buildMiniChart(closes, highs, lows, vols, curPrice, function(v){ return formatPrice(v, currency); }); } catch(_){}
 
     out.innerHTML = badge
+      + miniChartHtml
       + (macroHtml ? macroHtml : '')
+      + (fgHtml ? fgHtml : '')
       + analysis
       + radarHtml
       + volHtml
@@ -2445,6 +2450,285 @@ async function fetchKrSupply(code){
   } catch(e){}
   return null;
 }
+
+// ══════════════════════════════════════
+// ── SVG 미니 차트 ──
+// ══════════════════════════════════════
+function buildMiniChart(closes, highs, lows, vols, curPrice, fp){
+  var n=Math.min(closes.length,80);
+  var cl=closes.slice(-n), hi=(highs||[]).slice(-n), lo=(lows||[]).slice(-n), vo=(vols||[]).slice(-n);
+  if(cl.length<5) return '';
+
+  var W=500, pH=140, vH=28, rH=40, gap=6;
+  var vY=pH+gap, rY=pH+vH+gap*2, totalH=rY+rH+4;
+
+  var pMin=Math.min.apply(null,lo.concat(cl)), pMax=Math.max.apply(null,hi.concat(cl));
+  var pRange=pMax-pMin||1;
+  var vMax=Math.max.apply(null,vo)||1;
+
+  var px=function(i){ return (i/(n-1))*W; };
+  var py=function(p){ return pH-(p-pMin)/pRange*pH; };
+  var vy=function(v){ return vH-(v/vMax)*vH; };
+
+  // 가격 패스
+  var pPath=cl.map(function(c,i){ return (i===0?'M':'L')+px(i).toFixed(1)+','+py(c).toFixed(1); }).join(' ');
+  var aPath=pPath+' L'+W+','+pH+' L0,'+pH+' Z';
+  var isUp=cl[cl.length-1]>=cl[0];
+  var lC=isUp?'#22c55e':'#ef4444';
+  var fC=isUp?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
+
+  // RSI 배열
+  var rsiArr=null;
+  try{ rsiArr=_rsiArr(cl,14); }catch(_){}
+  var rPath='', rsiLast=null;
+  if(rsiArr&&rsiArr.length>1){
+    rsiLast=rsiArr[rsiArr.length-1];
+    var rOff=cl.length-rsiArr.length;
+    rPath=rsiArr.map(function(r,i){
+      var xi=i+rOff; if(xi<0) return '';
+      return (i===0?'M':'L')+px(xi).toFixed(1)+','+(rY+(rH-(r/100)*rH)).toFixed(1);
+    }).filter(Boolean).join(' ');
+  }
+
+  var rsiC=rsiLast==null?'#60a5fa':rsiLast>70?'#ef4444':rsiLast<30?'#22c55e':'#60a5fa';
+
+  // 현재가 라인 위치
+  var cpY=py(curPrice);
+  var barW=Math.max(1,(W/n)-1);
+
+  var svg='<svg viewBox="0 0 '+W+' '+totalH+'" style="width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg">'
+  // 배경
+  +'<rect width="'+W+'" height="'+totalH+'" fill="var(--s2,#1a1a2e)" rx="8"/>'
+  // 가격 그리드
+  +[0.25,0.5,0.75].map(function(r){ var y=(pH*r).toFixed(1); return '<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" stroke="rgba(255,255,255,.05)" stroke-width="1"/>'; }).join('')
+  // 볼륨 배경 구분선
+  +'<line x1="0" y1="'+vY+'" x2="'+W+'" y2="'+vY+'" stroke="rgba(255,255,255,.05)" stroke-width="1"/>'
+  // 가격 area + line
+  +'<path d="'+aPath+'" fill="'+fC+'"/>'
+  +'<path d="'+pPath+'" fill="none" stroke="'+lC+'" stroke-width="1.8"/>'
+  // 현재가 점선
+  +'<line x1="0" y1="'+cpY.toFixed(1)+'" x2="'+W+'" y2="'+cpY.toFixed(1)+'" stroke="rgba(255,255,255,.25)" stroke-width="1" stroke-dasharray="4,3"/>'
+  // 현재가 레이블
+  +'<rect x="'+(W-60)+'" y="'+(cpY-8).toFixed(1)+'" width="58" height="14" fill="'+lC+'" rx="2"/>'
+  +'<text x="'+(W-31)+'" y="'+(cpY+3).toFixed(1)+'" fill="#fff" font-size="9" text-anchor="middle">'+fp(curPrice)+'</text>'
+  // 거래량 바
+  +vo.map(function(v,i){
+    var bh=(v/vMax)*vH; var bx=(px(i)-barW/2).toFixed(1);
+    var bc=cl[i]>=(cl[i-1]||cl[i])?'rgba(34,197,94,.5)':'rgba(239,68,68,.5)';
+    return '<rect x="'+bx+'" y="'+(vY+vH-bh).toFixed(1)+'" width="'+barW.toFixed(1)+'" height="'+bh.toFixed(1)+'" fill="'+bc+'"/>';
+  }).join('')
+  // RSI 구분선
+  +'<line x1="0" y1="'+(rY+gap)+'" x2="'+W+'" y2="'+(rY+gap)+'" stroke="rgba(255,255,255,.05)" stroke-width="1"/>'
+  // RSI 30/50/70
+  +[[70,'rgba(239,68,68,.25)'],[50,'rgba(255,255,255,.1)'],[30,'rgba(34,197,94,.25)']].map(function(l){
+    var y=(rY+(rH-(l[0]/100)*rH)).toFixed(1);
+    return '<line x1="0" y1="'+y+'" x2="'+W+'" y2="'+y+'" stroke="'+l[1]+'" stroke-width="1" stroke-dasharray="3,3"/>';
+  }).join('')
+  // RSI 라인
+  +(rPath?'<path d="'+rPath+'" fill="none" stroke="'+rsiC+'" stroke-width="1.5"/>':'')
+  // RSI 현재값
+  +(rsiLast!=null?'<rect x="'+(W-34)+'" y="'+(rY+(rH-(rsiLast/100)*rH)-7).toFixed(1)+'" width="32" height="13" fill="'+rsiC+'" rx="2"/>'
+  +'<text x="'+(W-18)+'" y="'+(rY+(rH-(rsiLast/100)*rH)+3).toFixed(1)+'" fill="#fff" font-size="9" text-anchor="middle">'+Math.round(rsiLast)+'</text>':'')
+  // 라벨
+  +'<text x="4" y="10" fill="rgba(255,255,255,.4)" font-size="8">Price</text>'
+  +'<text x="4" y="'+(rY+9)+'" fill="rgba(255,255,255,.4)" font-size="8">RSI</text>'
+  +'</svg>';
+
+  return '<div style="margin:12px 0;border-radius:12px;overflow:hidden;border:1px solid var(--bd)">'+svg+'</div>';
+}
+
+// ── 공황/탐욕 지수 ──
+function buildFearGreedCard(mkt){
+  if(!mkt||!mkt.items) return '';
+  var items=mkt.items;
+  var vix=items.find(function(i){return i.label==='VIX';});
+  var sp=items.find(function(i){return i.label==='S&P500';});
+  var gold=items.find(function(i){return i.label==='금';});
+  var ks=items.find(function(i){return i.label==='KOSPI';});
+  var dxy=items.find(function(i){return i.label==='달러지수';});
+
+  if(!vix||!vix.price) return '';
+  var score=50;
+
+  // VIX 기여 (30점)
+  var v=vix.price;
+  if(v<12)score+=22; else if(v<15)score+=14; else if(v<18)score+=6;
+  else if(v<22)score-=4; else if(v<28)score-=12; else score-=22;
+
+  // VIX 변화 (10점)
+  if(vix.chg!=null){ if(vix.chg<-5)score+=8; else if(vix.chg<-2)score+=4; else if(vix.chg>5)score-=8; else if(vix.chg>2)score-=4; }
+
+  // S&P500 모멘텀 (15점)
+  if(sp&&sp.chg!=null){ if(sp.chg>1.5)score+=10; else if(sp.chg>0.5)score+=5; else if(sp.chg<-1.5)score-=10; else if(sp.chg<-0.5)score-=5; }
+
+  // 안전자산 수요 — 금 (10점)
+  if(gold&&gold.chg!=null&&sp&&sp.chg!=null){
+    if(gold.chg>1&&sp.chg<0) score-=8;
+    if(gold.chg<-0.5&&sp.chg>0) score+=5;
+  }
+
+  // 달러 (5점) — 달러 강세 = 공포
+  if(dxy&&dxy.chg!=null){ if(dxy.chg>0.5)score-=4; else if(dxy.chg<-0.5)score+=3; }
+
+  score=Math.max(0,Math.min(100,Math.round(score)));
+
+  var label=score>=80?'극도 탐욕':score>=65?'탐욕':score>=45?'중립':score>=25?'공포':'극도 공포';
+  var color=score>=80?'#f97316':score>=65?'#f59e0b':score>=45?'#6b7280':score>=25?'#60a5fa':'#3b82f6';
+  var emoji=score>=80?'🤑':score>=65?'😀':score>=45?'😐':score>=25?'😰':'😱';
+
+  // 게이지 각도 (180도 호 기준)
+  var angle=-180+score*1.8; // -180° (극공포) → 0° (중립) → +180°가 아니라
+  // 실제로 0°(왼쪽)~180°(오른쪽) 반원
+  var r=44, cx=70, cy=70;
+  var rad=(score/100*Math.PI);
+  var gx=(cx+r*Math.cos(Math.PI-rad)).toFixed(1);
+  var gy=(cy-r*Math.sin(Math.PI-rad)+0).toFixed(1);
+  // 배경 반원
+  var bgPath='M '+(cx-r)+' '+cy+' A '+r+' '+r+' 0 0 1 '+(cx+r)+' '+cy;
+  // 점수 반원 (그라디언트처럼)
+  var fgPath='M '+(cx-r)+' '+cy+' A '+r+' '+r+' 0 '+(rad>Math.PI/2?1:0)+' 1 '+gx+' '+gy;
+
+  var gauge='<svg viewBox="0 0 140 80" style="width:140px;height:80px;flex-shrink:0" xmlns="http://www.w3.org/2000/svg">'
+    +'<path d="'+bgPath+'" fill="none" stroke="rgba(255,255,255,.1)" stroke-width="10" stroke-linecap="round"/>'
+    +'<path d="'+fgPath+'" fill="none" stroke="'+color+'" stroke-width="10" stroke-linecap="round"/>'
+    +'<text x="'+cx+'" y="'+(cy+2)+'" text-anchor="middle" fill="'+color+'" font-size="22" font-weight="900">'+score+'</text>'
+    +'<text x="'+cx+'" y="'+(cy+14)+'" text-anchor="middle" fill="rgba(255,255,255,.5)" font-size="8">/ 100</text>'
+    +'</svg>';
+
+  var breakdown=[
+    {label:'VIX 수준',score:v<15?'낮음(탐욕)':v>25?'높음(공포)':'보통',c:v<15?'#22c55e':v>25?'#ef4444':'#6b7280'},
+    {label:'시장 모멘텀',score:sp&&sp.chg!=null?(sp.chg>0?'+'+sp.chg.toFixed(1)+'% ↑':sp.chg.toFixed(1)+'% ↓'):'—',c:sp&&sp.chg>0?'#22c55e':'#ef4444'},
+    {label:'안전자산 수요',score:gold&&gold.chg!=null?(gold.chg>0.5?'금 강세(공포)':gold.chg<-0.5?'금 약세(탐욕)':'중립'):'—',c:'#f59e0b'},
+    {label:'달러 강세',score:dxy&&dxy.chg!=null?(dxy.chg>0.3?'강세(공포)':dxy.chg<-0.3?'약세(탐욕)':'중립'):'—',c:'#6b7280'},
+  ];
+
+  return '<div style="margin-bottom:12px;background:var(--bg);border:1px solid var(--bd);border-radius:14px;overflow:hidden">'
+  +'<div style="padding:10px 16px;background:var(--s1);border-bottom:1px solid var(--bd);font-size:14px;font-weight:800;color:var(--tx)">'+emoji+' 공황/탐욕 지수</div>'
+  +'<div style="padding:14px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap">'
+  +gauge
+  +'<div style="flex:1;min-width:160px">'
+  +'<div style="font-size:22px;font-weight:900;color:'+color+';margin-bottom:2px">'+label+'</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:10px">VIX·시장모멘텀·안전자산 기반 자체 계산</div>'
+  +breakdown.map(function(b){
+    return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)">'
+      +'<span style="color:#6b7280">'+b.label+'</span><span style="color:'+b.c+';font-weight:700">'+b.score+'</span></div>';
+  }).join('')
+  +'</div></div></div>';
+}
+
+// ── 계절성 분석 ──
+var _SEASONALITY = {
+  'S&P500': [0.9,-0.1,1.3,1.5,0.3,0.2,1.0,-0.1,-0.7,0.6,1.7,1.6],
+  'NASDAQ': [1.5,-0.3,1.8,1.7,0.4,0.3,1.3,0.2,-1.1,0.8,2.1,2.0],
+  'KOSPI':  [2.1,-0.5,1.8,1.2,0.8,-0.3,-0.5,-0.8,-1.2,1.5,1.8,1.2],
+  'KOSDAQ': [2.8,-0.8,2.3,1.5,1.0,-0.5,-0.8,-1.0,-1.5,1.8,2.2,1.5],
+  'BTC':    [10.2,13.5,8.0,6.5,-1.0,-5.0,2.0,4.0,-5.5,18.5,35.0,10.0],
+};
+var _MONTHS=['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+
+function buildSeasonalityCard(){
+  var now=new Date(); var curMonth=now.getMonth();
+  var selected=window._seasonSym||'S&P500';
+  var data=_SEASONALITY[selected];
+
+  var tabs=Object.keys(_SEASONALITY).map(function(k){
+    var active=k===selected;
+    return '<button onclick="window._seasonSym=\''+k+'\';var el=document.getElementById(\'ct-season-inner\');if(el){el.innerHTML=buildSeasonalityInner();}" '
+      +'style="padding:4px 10px;border-radius:16px;border:1px solid '+(active?'var(--ac)':'var(--bd)')+';background:'+(active?'var(--ac)':'transparent')+';color:'+(active?'#fff':'var(--mt)')+';font-size:11px;cursor:pointer">'+k+'</button>';
+  }).join('');
+
+  return '<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:14px;font-weight:800;color:var(--tx);margin-bottom:10px">🗓 계절성 분석 (월별 평균 수익률)</div>'
+  +'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:12px">'+tabs+'</div>'
+  +'<div id="ct-season-inner">'+buildSeasonalityInner()+'</div>'
+  +'<div style="font-size:10px;color:#4b5563;margin-top:8px">⚠ 과거 약 20~30년 평균 기준. 미래 수익률을 보장하지 않습니다.</div>'
+  +'</div>';
+}
+
+function buildSeasonalityInner(){
+  var selected=window._seasonSym||'S&P500';
+  var data=_SEASONALITY[selected]; if(!data) return '';
+  var now=new Date(); var curMonth=now.getMonth();
+  var maxAbs=Math.max.apply(null,data.map(function(x){return Math.abs(x);}));
+
+  return '<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:5px">'
+  +data.map(function(v,i){
+    var pct=Math.abs(v)/maxAbs; var isPos=v>=0;
+    var c=isPos?'#22c55e':'#ef4444'; var bg=isPos?'rgba(34,197,94,.12)':'rgba(239,68,68,.12)';
+    var isCur=i===curMonth;
+    return '<div style="padding:6px 4px;border-radius:6px;background:'+bg+';border:1px solid '+(isCur?c:'transparent')+';text-align:center">'
+      +'<div style="font-size:9px;color:#6b7280;margin-bottom:2px">'+_MONTHS[i]+'</div>'
+      +'<div style="font-size:13px;font-weight:900;color:'+c+'">'+(isPos?'+':'')+v.toFixed(1)+'%</div>'
+      +'<div style="height:3px;border-radius:2px;background:'+c+';width:'+(pct*100)+'%;margin:3px auto 0"></div>'
+      +(isCur?'<div style="font-size:8px;color:'+c+';margin-top:2px">이번 달</div>':'')
+      +'</div>';
+  }).join('')
+  +'</div>';
+}
+
+// ── 수익 목표 계획기 ──
+window._ctCalcGoal = function(){
+  var cap   = parseFloat((document.getElementById('ct-goal-cap')||{}).value)||0;
+  var target = parseFloat((document.getElementById('ct-goal-target')||{}).value)||0;
+  var years  = parseFloat((document.getElementById('ct-goal-years')||{}).value)||0;
+  var winRate= parseFloat((document.getElementById('ct-goal-wr')||{}).value)||50;
+  var avgWin = parseFloat((document.getElementById('ct-goal-avgwin')||{}).value)||10;
+  var avgLoss= parseFloat((document.getElementById('ct-goal-avgloss')||{}).value)||5;
+  var res    = document.getElementById('ct-goal-result'); if(!res) return;
+  if(!cap||!target||!years){ res.innerHTML='<span style="color:#6b7280">모든 항목을 입력하세요</span>'; return; }
+
+  // 필요 CAGR
+  var cagr=(Math.pow(target/cap,1/years)-1)*100;
+  // 필요 월 수익률
+  var monthly=(Math.pow(target/cap,1/(years*12))-1)*100;
+  // 기대값 (Kelly)
+  var wr=winRate/100, lr=1-wr;
+  var ev=wr*avgWin/100-lr*avgLoss/100; // 기대 수익률/트레이드
+  var tradesNeeded=ev>0?Math.ceil(Math.log(target/cap)/Math.log(1+ev)):null;
+
+  // 더블 횟수
+  var doublings=Math.log2(target/cap);
+
+  res.innerHTML='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+  +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+  +'<div style="font-size:10px;color:#6b7280">필요 연환산 수익률 (CAGR)</div>'
+  +'<div style="font-size:20px;font-weight:900;color:'+( cagr>30?'#ef4444':cagr>15?'#f59e0b':'#22c55e')+'">'+cagr.toFixed(1)+'%</div></div>'
+  +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+  +'<div style="font-size:10px;color:#6b7280">필요 월 평균 수익률</div>'
+  +'<div style="font-size:20px;font-weight:900;color:var(--tx)">'+monthly.toFixed(2)+'%</div></div>'
+  +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+  +'<div style="font-size:10px;color:#6b7280">계좌 2배 필요 횟수</div>'
+  +'<div style="font-size:20px;font-weight:900;color:var(--tx)">'+doublings.toFixed(1)+'회</div></div>'
+  +(ev>0&&tradesNeeded?'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)">'
+  +'<div style="font-size:10px;color:#22c55e">기대값 기반 필요 매매 수</div>'
+  +'<div style="font-size:20px;font-weight:900;color:#22c55e">'+tradesNeeded+'회</div>'
+  +'<div style="font-size:10px;color:#6b7280">기대값/트레이드: '+(ev*100).toFixed(2)+'%</div></div>':'')
+  +'</div>'
+  +(cagr>50?'<div style="margin-top:8px;padding:8px;background:rgba(239,68,68,.08);border-radius:6px;font-size:11px;color:#ef4444">⚠ CAGR '+cagr.toFixed(0)+'%는 현실적으로 매우 달성하기 어렵습니다. 목표나 기간을 조정하세요.</div>':'');
+};
+
+// ── 트레이딩 원칙 에디터 ──
+function _ruleGet(){ return JSON.parse(localStorage.getItem('ct_rules')||'null') || [
+  '진입 근거가 사라지면 즉시 손절한다.',
+  '손절 후 새로운 이유를 붙여 재진입하지 않는다.',
+  '계획에 없던 종목은 당일 매수하지 않는다.',
+  'FOMO는 적의 무기다. 오늘 놓쳐도 내일 기회는 온다.',
+  'R:R 1:1 미만인 거래는 하지 않는다.',
+  '포지션은 최대 계좌의 10% 이내로 시작한다.',
+  '하루 최대 손실 한도를 설정하고 도달하면 거래를 멈춘다.',
+]; }
+function _ruleSave(arr){ localStorage.setItem('ct_rules', JSON.stringify(arr)); }
+
+window._ctRuleSave = function(){
+  var ta=document.getElementById('ct-rules-ta'); if(!ta) return;
+  var lines=ta.value.split('\n').map(function(l){return l.trim();}).filter(Boolean);
+  _ruleSave(lines);
+  var btn=document.getElementById('ct-rules-btn'); if(btn){ btn.textContent='✅ 저장됨'; setTimeout(function(){btn.textContent='저장';},2000); }
+};
+window._ctRuleReset = function(){
+  _ruleSave(null); localStorage.removeItem('ct_rules');
+  var ta=document.getElementById('ct-rules-ta'); if(ta) ta.value=_ruleGet().join('\n');
+};
 
 // ── % 계산 헬퍼 ──
 function _pct(from, to){
@@ -4508,6 +4792,9 @@ function _ctRenderCalendar(){
   // 이벤트 없으면
   if(!filtered.length) html+='<div style="text-align:center;padding:20px;color:#6b7280">해당 카테고리의 예정 이벤트가 없습니다.</div>';
 
+  // 계절성 섹션 추가
+  html+='<div style="margin-top:16px">'+buildSeasonalityCard()+'</div>';
+
   el.innerHTML=html;
 }
 
@@ -5018,11 +5305,54 @@ function buildToolsPane(){
   +'<div id="ct-be-result"><div style="font-size:12px;color:#6b7280">평균 단가를 입력하세요</div></div>'
   +'</div>'
 
+  // ⑤ 수익 목표 계획기
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">🎯 수익 목표 계획기</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">목표 금액까지 필요한 연수익률·매매 횟수를 역산합니다</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💰 현재 계좌</div>'
+  +'<input id="ct-goal-cap" class="ct-input" type="number" placeholder="예: 10000000" oninput="window._ctCalcGoal()"></div>'
+  +'<div><div style="font-size:11px;color:#60a5fa;margin-bottom:4px">🎯 목표 금액</div>'
+  +'<input id="ct-goal-target" class="ct-input" type="number" placeholder="예: 100000000" oninput="window._ctCalcGoal()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">⏱ 목표 기간 (년)</div>'
+  +'<input id="ct-goal-years" class="ct-input" type="number" placeholder="예: 5" oninput="window._ctCalcGoal()"></div>'
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">✅ 예상 승률 (%)</div>'
+  +'<input id="ct-goal-wr" class="ct-input" type="number" value="55" min="1" max="99" oninput="window._ctCalcGoal()"></div>'
+  +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">📈 평균 수익 (%/트레이드)</div>'
+  +'<input id="ct-goal-avgwin" class="ct-input" type="number" value="8" oninput="window._ctCalcGoal()"></div>'
+  +'<div><div style="font-size:11px;color:#ef4444;margin-bottom:4px">📉 평균 손실 (%/트레이드)</div>'
+  +'<input id="ct-goal-avgloss" class="ct-input" type="number" value="4" oninput="window._ctCalcGoal()"></div>'
+  +'</div>'
+  +'<div id="ct-goal-result"><div style="font-size:12px;color:#6b7280">현재 계좌와 목표 금액을 입력하세요</div></div>'
+  +'</div>'
+
+  // ⑥ 계절성 분석
+  +(buildSeasonalityCard())
+
   +'</div>';
 }
 
 // ── 이론 가이드 탭 ──
 function buildTheoryPane(){
+  var rules=_ruleGet();
+  var ruleSection='<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx)">📜 나의 트레이딩 원칙</div>'
+  +'<div style="display:flex;gap:6px">'
+  +'<button onclick="window._ctRuleReset()" style="padding:5px 10px;background:transparent;border:1px solid var(--bd);border-radius:6px;color:#6b7280;cursor:pointer;font-size:11px">초기화</button>'
+  +'<button id="ct-rules-btn" onclick="window._ctRuleSave()" style="padding:5px 12px;background:var(--ac);color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700">저장</button>'
+  +'</div></div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">매매 전 반드시 읽을 나만의 원칙을 작성하세요. (한 줄에 하나씩)</div>'
+  +'<textarea id="ct-rules-ta" class="ct-input" rows="8" style="font-size:12px;line-height:1.8">'
+  +rules.join('\n')
+  +'</textarea>'
+  +'<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px">'
+  +rules.map(function(r,i){ return '<div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--tx);padding:5px 0;border-bottom:1px solid rgba(255,255,255,.04)">'
+    +'<span style="color:var(--ac);font-weight:800;min-width:18px">'+(i+1)+'.</span>'+r+'</div>'; }).join('')
+  +'</div></div>';
+
   // ── 차트술사 구조론 주요 개념 ──
   var theoryCards = [
     {
@@ -5159,6 +5489,8 @@ function buildTheoryPane(){
   var rules=['종가 기준이 아닌 장중 돌파로 판단하지 않는다.','도지 모양만 보고 매수/매도 결론 내리지 않는다.','박스와 추세를 구분하지 않고 분석하지 않는다.','사건봉 꼬리 끝만 보고 핵심 가격 정하지 않는다.','거래량 없는 돌파를 신뢰도 높게 평가하지 않는다.','기능선 사라졌는데 새 이유 붙여 보유하지 않는다.','갭 자체만 보고 의미 부여하지 않는다.','손절 기준 없이 가능성만 말하지 않는다.','현재가 가깝다는 이유로 지지/저항 선택하지 않는다.'];
 
   return '<div class="ct-pane" data-pane="theory" style="display:none">'
+
+  + ruleSection
 
   // ── 차트술사 구조론 핵심 개념 ──
   +'<div style="padding:14px 16px;background:rgba(245,158,11,.08);border:1.5px solid #f59e0b;border-radius:12px;margin-bottom:14px">'
