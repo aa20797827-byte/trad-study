@@ -66,6 +66,24 @@ window._ctUpdateResult = function(id, result){
   if(rec){ rec.result=result; localStorage.setItem('ct_hist',JSON.stringify(hist)); renderHistory(); }
 };
 
+// 기록에서 계산기로 불러오기
+window._ctLoadHistory = function(id){
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
+  var h = hist.find(function(r){return r.id===id;});
+  if(!h) return;
+  var s=function(elId,v){var el=document.getElementById(elId);if(el&&v)el.value=v;};
+  s('ct-calc-entry', h.price);
+  s('ct-calc-stop',  h.lower ? Math.round(h.lower*0.985) : '');
+  s('ct-calc-target',h.upper || '');
+  s('ct-sym-input',  h.sym);
+  // 탭 전환
+  window._ctSwitchTab('history');
+  window._ctCalcPosition();
+  // 피드백
+  var btn=document.querySelector('[onclick*=\"_ctLoadHistory('+id+')\"]');
+  if(btn){btn.textContent='✅';setTimeout(function(){btn.textContent='↺';},1500);}
+};
+
 // 기록 삭제
 window._ctDeleteHistory = function(id){
   var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]').filter(function(h){return h.id!==id;});
@@ -83,7 +101,7 @@ function renderHistory(){
     var rC = h.result==='성공'?'#22c55e':h.result==='실패'?'#ef4444':'#6b7280';
     return '<tr>'
       +'<td>'+h.date+' '+h.time+'</td>'
-      +'<td><b>'+h.sym+'</b></td>'
+      +'<td><b style="cursor:pointer;color:var(--ac)" onclick="window._ctLoadHistory('+h.id+')" title="클릭: 계산기에 불러오기">'+h.sym+'</b></td>'
       +'<td>'+(h.price?h.price.toLocaleString():'—')+'</td>'
       +'<td style="font-size:11px;color:#9ca3af">'+(h.lower?h.lower.toLocaleString():'—')+' ~ '+(h.upper?h.upper.toLocaleString():'—')+'</td>'
       +'<td><span style="font-size:11px;padding:2px 6px;background:var(--s2);border-radius:4px">'+h.struct+'</span></td>'
@@ -93,7 +111,10 @@ function renderHistory(){
         +'<option value="실패" '+(h.result==='실패'?'selected':'')+'>❌ 실패</option>'
         +'<option value="보유중" '+(h.result==='보유중'?'selected':'')+'>📊 보유중</option>'
       +'</select></td>'
-      +'<td><button onclick="window._ctDeleteHistory('+h.id+')" style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:12px">🗑</button></td>'
+      +'<td style="white-space:nowrap">'
+      +'<button onclick="window._ctLoadHistory('+h.id+')" title="계산기에 불러오기" style="background:none;border:1px solid var(--bd);border-radius:4px;color:var(--ac);cursor:pointer;font-size:11px;padding:2px 6px;margin-right:4px">↺</button>'
+      +'<button onclick="window._ctDeleteHistory('+h.id+')" style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:12px">🗑</button>'
+      +'</td>'
     +'</tr>';
   }).join('');
 }
@@ -1234,13 +1255,14 @@ window._ctSetAvKey = function(){
 
 // 에러 화면에서 직접 입력 분석
 window._ctQuickAnalyze = function(){
-  var price = parseFloat((document.getElementById('ct-quick-price')||{}).value)||0;
-  var upper = parseFloat(document.getElementById('ct-quick-upper').value)||0;
-  var mid   = parseFloat(document.getElementById('ct-quick-mid').value)||0;
-  var lower = parseFloat(document.getElementById('ct-quick-lower').value)||0;
-  var struct= document.getElementById('ct-quick-structure').value;
+  // 버그 수정: null 방어 추가, ct-quick-mid 제거 (폼에 없는 요소)
+  var g = function(id){ return document.getElementById(id)||{value:''}; };
+  var price  = parseFloat(g('ct-quick-price').value)||0;
+  var upper  = parseFloat(g('ct-quick-upper').value)||0;
+  var lower  = parseFloat(g('ct-quick-lower').value)||0;
+  var struct = g('ct-quick-structure').value||'box';
+  var mid    = upper&&lower ? Math.round((upper+lower)/2) : 0;
   if(!price){ alert('현재 가격을 입력해 주세요.'); return; }
-  var cur = formatPrice ? formatPrice : function(v){ return Math.round(v).toLocaleString()+'원'; };
   var data = {
     structure: struct, frame:'daily',
     currentPrice: price, currency: 'KRW',
@@ -1250,7 +1272,10 @@ window._ctQuickAnalyze = function(){
     gap:'none', retest:'pending', note:'차트에서 직접 입력'
   };
   var out = document.getElementById('ct-auto-output');
-  if(out) out.innerHTML = generateAnalysis(data);
+  if(out){
+    try { out.innerHTML = generateAnalysis(data); }
+    catch(e){ out.innerHTML = '<div style="padding:12px;color:#ef4444">분석 오류: '+e.message+'</div>'; }
+  }
 };
 
 // 로딩 표시
@@ -3020,7 +3045,7 @@ function buildChartPane(){
 function buildAnalyzePane(){
   return '<div class="ct-pane" data-pane="analyze" style="display:none">'
   +'<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#60a5fa">'
-  +'💡 차트 탭에서 자동 분석하면 이 폼에 값이 자동으로 채워집니다. 직접 수정 후 재분석 가능.'
+  +'💡 TradingView 차트에서 직접 읽은 값을 입력하거나, 차트 탭 자동 분석 후 여기서 세밀하게 조정·재분석할 수 있습니다.'
   +'</div>'
   +'<div class="ct-box"><div class="ct-box-t">📋 기본 정보</div>'
   +'<div class="ct-g2">'
@@ -3117,8 +3142,9 @@ function buildHistoryPane(){
   +'<button id="ct-save-btn" onclick="window._ctSaveAnalysis()" style="padding:8px 16px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700">💾 현재 분석 저장</button>'
   +'</div>'
   +'<div style="overflow-x:auto">'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:8px">종목명 클릭 또는 ↺ 버튼으로 계산기에 불러올 수 있습니다.</div>'
   +'<table class="ct-hist-table"><thead><tr>'
-  +'<th>날짜·시간</th><th>종목</th><th>진입가</th><th>지지~저항</th><th>구조</th><th>결과</th><th></th>'
+  +'<th>날짜·시간</th><th>종목 <span style="font-weight:400;color:#4b5563">(클릭↺)</span></th><th>진입가</th><th>지지~저항</th><th>구조</th><th>결과</th><th></th>'
   +'</tr></thead>'
   +'<tbody id="ct-hist-body"><tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">불러오는 중...</td></tr></tbody>'
   +'</table>'
