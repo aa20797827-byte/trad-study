@@ -24,10 +24,11 @@ export default {
 
     try {
       if (url.pathname === '/ping') {
-        return jsonResp({ ok: true, worker: true, v: 5 });
+        return jsonResp({ ok: true, worker: true, v: 6 });
       }
-      if (url.pathname === '/api/quote') return await handleQuote(url);
-      if (url.pathname === '/api/news')  return await handleNews(url);
+      if (url.pathname === '/api/quote')       return await handleQuote(url);
+      if (url.pathname === '/api/news')        return await handleNews(url);
+      if (url.pathname === '/api/fundamental') return await handleFundamental(url);
     } catch (err) {
       return jsonResp({ error: String(err) }, 500);
     }
@@ -67,6 +68,57 @@ async function handleNews(url) {
     });
   }
   return jsonResp({ news: [] });
+}
+
+async function handleFundamental(url) {
+  const sym = sanitize(url.searchParams.get('symbol'));
+  if (!sym) return jsonResp({ error: 'symbol_missing' }, 400);
+
+  const modules = 'summaryDetail,defaultKeyStatistics,financialData,price,calendarEvents';
+  const data = await yfetch('/v10/finance/quoteSummary/' + encodeURIComponent(sym) + '?modules=' + modules);
+
+  if (data && data.quoteSummary && data.quoteSummary.result && data.quoteSummary.result[0]) {
+    const r  = data.quoteSummary.result[0];
+    const sd = r.summaryDetail        || {};
+    const ks = r.defaultKeyStatistics || {};
+    const fd = r.financialData        || {};
+    const pr = r.price                || {};
+    const ce = r.calendarEvents       || {};
+    const v  = k => (k && k.raw !== undefined) ? k.raw : k;
+
+    return jsonResp({
+      shortName:       pr.shortName || pr.longName,
+      currency:        pr.currency  || 'USD',
+      marketCap:       v(pr.marketCap),
+      per:             v(sd.trailingPE),
+      forwardPer:      v(sd.forwardPE),
+      pbr:             v(sd.priceToBook),
+      dividendYield:   v(sd.dividendYield),
+      week52High:      v(sd.fiftyTwoWeekHigh),
+      week52Low:       v(sd.fiftyTwoWeekLow),
+      beta:            v(sd.beta) || v(ks.beta),
+      eps:             v(ks.trailingEps),
+      bookValue:       v(ks.bookValue),
+      profitMargins:   v(ks.profitMargins) || v(fd.profitMargins),
+      roe:             v(fd.returnOnEquity),
+      roa:             v(fd.returnOnAssets),
+      debtToEquity:    v(fd.debtToEquity),
+      revenueGrowth:   v(fd.revenueGrowth),
+      grossMargins:    v(fd.grossMargins),
+      operatingMargins:v(fd.operatingMargins),
+      freeCashflow:    v(fd.freeCashflow),
+      totalDebt:       v(fd.totalDebt),
+      totalCash:       v(fd.totalCash),
+      currentRatio:    v(fd.currentRatio),
+      quickRatio:      v(fd.quickRatio),
+      targetMeanPrice: v(fd.targetMeanPrice),
+      recommendationKey: fd.recommendationKey,
+      numberOfAnalystOpinions: v(fd.numberOfAnalystOpinions),
+      nextEarningsDate: ce.earnings && ce.earnings.earningsDate && ce.earnings.earningsDate[0]
+        ? v(ce.earnings.earningsDate[0]) : null,
+    });
+  }
+  return jsonResp({ error: 'no_data' }, 404);
 }
 
 async function yfetch(path) {
