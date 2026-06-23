@@ -312,14 +312,12 @@ function initTV(){
     banner.id = 'ct-tv-login-banner';
     banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;'
       +'padding:8px 14px;background:#1e3a5f;border-bottom:1px solid #2d5a9e;font-size:12px;flex-shrink:0';
-    banner.innerHTML = '<span style="color:#93c5fd">🔑 한국주식 차트는 TradingView 로그인 후 표시됩니다</span>'
+    banner.innerHTML = '<span style="color:#93c5fd">🔑 한국주식 차트는 TradingView 로그인 필요</span>'
       +'<div style="display:flex;gap:8px">'
-      +'<a href="https://www.tradingview.com/accounts/signin/" target="_blank" '
-      +'style="padding:5px 12px;background:#3b82f6;color:#fff;border-radius:6px;text-decoration:none;font-weight:700;font-size:12px">로그인</a>'
-      +'<a href="https://www.tradingview.com/accounts/signup/" target="_blank" '
-      +'style="padding:5px 12px;background:transparent;color:#93c5fd;border:1px solid #2d5a9e;border-radius:6px;text-decoration:none;font-weight:600;font-size:12px">무료 가입</a>'
-      +'<button onclick="window._ctRefreshTV()" '
-      +'style="padding:5px 12px;background:transparent;color:#6b7280;border:1px solid var(--bd);border-radius:6px;cursor:pointer;font-size:12px">로그인 후 새로고침 ↺</button>'
+      +'<button onclick="window._ctTVLogin()" '
+      +'style="padding:5px 14px;background:#3b82f6;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:700;font-size:12px">🔐 팝업으로 로그인</button>'
+      +'<button onclick="window._ctTVSignup()" '
+      +'style="padding:5px 12px;background:transparent;color:#93c5fd;border:1px solid #2d5a9e;border-radius:6px;cursor:pointer;font-weight:600;font-size:12px">무료 가입</button>'
       +'</div>';
 
     var chartWrap = document.createElement('div');
@@ -357,11 +355,33 @@ function initTV(){
   }
 }
 
-// 로그인 후 차트 새로고침
-window._ctRefreshTV = function(){
-  _tvLoaded = false;
-  initTV();
-  _tvLoaded = true;
+// TradingView 로그인 팝업 (로그인 완료 후 차트 자동 새로고침)
+window._ctTVLogin = function(){
+  var popup = window.open(
+    'https://www.tradingview.com/accounts/signin/',
+    'tv_login',
+    'width=520,height=640,scrollbars=yes,resizable=yes,toolbar=no,menubar=no'
+  );
+  if(!popup){ alert('팝업이 차단됐습니다. 브라우저 팝업 허용 후 다시 시도해주세요.'); return; }
+
+  // 팝업 닫히면 차트 자동 새로고침
+  var timer = setInterval(function(){
+    if(popup.closed){
+      clearInterval(timer);
+      _tvLoaded = false;
+      var box = document.getElementById('ct-tv-box');
+      if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">차트 새로고침 중...</div>';
+      setTimeout(function(){ initTV(); _tvLoaded = true; }, 500);
+    }
+  }, 800);
+};
+
+window._ctTVSignup = function(){
+  window.open(
+    'https://www.tradingview.com/accounts/signup/',
+    'tv_signup',
+    'width=520,height=700,scrollbars=yes,resizable=yes,toolbar=no,menubar=no'
+  );
 };
 
 // ── 심볼 변경 ──
