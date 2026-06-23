@@ -355,33 +355,95 @@ function initTV(){
   }
 }
 
-// TradingView 로그인 팝업 (로그인 완료 후 차트 자동 새로고침)
-window._ctTVLogin = function(){
-  var popup = window.open(
-    'https://www.tradingview.com/accounts/signin/',
-    'tv_login',
-    'width=520,height=640,scrollbars=yes,resizable=yes,toolbar=no,menubar=no'
-  );
-  if(!popup){ alert('팝업이 차단됐습니다. 브라우저 팝업 허용 후 다시 시도해주세요.'); return; }
+// ── TradingView 로그인 팝업 + 팝업 차단 시 안내 ──
+function _ctOpenTVPopup(url, w, h){
+  var popup = window.open(url, 'tv_auth', 'width='+w+',height='+h+',scrollbars=yes,resizable=yes,toolbar=no,menubar=no');
+  if(popup){ return popup; }
 
+  // 팝업 차단됨 → 안내 모달 표시
+  _ctShowPopupGuide(url);
+  return null;
+}
+
+function _ctShowPopupGuide(loginUrl){
+  // 기존 모달 제거
+  var old = document.getElementById('ct-popup-guide');
+  if(old) old.remove();
+
+  var isChrome = navigator.userAgent.includes('Chrome') && !navigator.userAgent.includes('Edg');
+  var isEdge = navigator.userAgent.includes('Edg');
+  var isFirefox = navigator.userAgent.includes('Firefox');
+  var isSafari = navigator.userAgent.includes('Safari') && !isChrome;
+
+  var browserGuide = isChrome
+    ? '① 주소창 오른쪽 끝 <b>🚫 팝업 차단</b> 아이콘 클릭<br>'
+      +'② <b>"항상 팝업 허용"</b> 선택 후 완료 클릭<br>'
+      +'③ 아래 로그인 버튼 다시 클릭'
+    : isEdge
+    ? '① 주소창 오른쪽 끝 <b>팝업 차단</b> 아이콘 클릭<br>'
+      +'② <b>"이 사이트의 팝업 항상 허용"</b> 선택<br>'
+      +'③ 아래 로그인 버튼 다시 클릭'
+    : isFirefox
+    ? '① 주소창 아래 <b>"팝업 차단됨"</b> 바 클릭<br>'
+      +'② <b>"이 사이트에서 팝업 허용"</b> 선택<br>'
+      +'③ 아래 로그인 버튼 다시 클릭'
+    : isSafari
+    ? '① 상단 메뉴 <b>Safari → 환경설정</b><br>'
+      +'② <b>웹사이트 → 팝업 창</b><br>'
+      +'③ 현재 사이트를 <b>"허용"</b>으로 변경'
+    : '① 브라우저 주소창 근처에 <b>팝업 차단 아이콘</b>이 보입니다.<br>'
+      +'② 클릭 후 <b>이 사이트 팝업 허용</b>을 선택하세요.';
+
+  var modal = document.createElement('div');
+  modal.id = 'ct-popup-guide';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;'
+    +'display:flex;align-items:center;justify-content:center;padding:20px';
+  modal.innerHTML =
+    '<div style="background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:28px;max-width:460px;width:100%">'
+    +'<div style="font-size:20px;font-weight:900;color:var(--tx);margin-bottom:6px">🚫 팝업이 차단됐습니다</div>'
+    +'<div style="font-size:13px;color:#6b7280;margin-bottom:18px">아래 방법으로 팝업을 허용하면 대시보드를 벗어나지 않고 로그인할 수 있습니다.</div>'
+    // 브라우저별 안내
+    +'<div style="background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.25);border-radius:10px;padding:14px;margin-bottom:16px">'
+    +'<div style="font-size:12px;font-weight:700;color:#60a5fa;margin-bottom:8px">📋 팝업 허용 방법</div>'
+    +'<div style="font-size:13px;color:var(--tx);line-height:2">'+browserGuide+'</div>'
+    +'</div>'
+    // 주소창 이미지 설명
+    +'<div style="background:var(--s2);border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#9ca3af">'
+    +'💡 팝업 차단 아이콘은 주소창 맨 오른쪽에 있습니다 →&nbsp;<span style="background:rgba(239,68,68,.15);color:#ef4444;padding:2px 6px;border-radius:4px;font-size:11px">🚫</span>'
+    +'</div>'
+    // 버튼들
+    +'<div style="display:flex;gap:10px;flex-wrap:wrap">'
+    +'<button onclick="document.getElementById(\'ct-popup-guide\').remove();window._ctTVLogin()" '
+    +'style="flex:1;padding:12px;background:var(--ac);color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;min-width:140px">팝업 허용 후 다시 시도</button>'
+    +'<a href="'+loginUrl+'" target="_blank" onclick="document.getElementById(\'ct-popup-guide\').remove()" '
+    +'style="flex:1;padding:12px;background:var(--s2);color:var(--tx);border:1px solid var(--bd);border-radius:8px;text-decoration:none;font-size:13px;font-weight:600;text-align:center;min-width:120px;display:flex;align-items:center;justify-content:center">새 탭으로 열기 ↗</a>'
+    +'</div>'
+    +'<button onclick="document.getElementById(\'ct-popup-guide\').remove()" '
+    +'style="width:100%;margin-top:10px;padding:8px;background:transparent;color:#4b5563;border:none;cursor:pointer;font-size:12px">닫기</button>'
+    +'</div>';
+
+  document.body.appendChild(modal);
+  // 배경 클릭으로 닫기
+  modal.addEventListener('click', function(e){ if(e.target===modal) modal.remove(); });
+}
+
+window._ctTVLogin = function(){
+  var popup = _ctOpenTVPopup('https://www.tradingview.com/accounts/signin/', 520, 650);
+  if(!popup) return;
   // 팝업 닫히면 차트 자동 새로고침
   var timer = setInterval(function(){
     if(popup.closed){
       clearInterval(timer);
       _tvLoaded = false;
       var box = document.getElementById('ct-tv-box');
-      if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">차트 새로고침 중...</div>';
-      setTimeout(function(){ initTV(); _tvLoaded = true; }, 500);
+      if(box) box.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;color:var(--mt);font-size:13px">✅ 로그인 완료 — 차트 새로고침 중...</div>';
+      setTimeout(function(){ initTV(); _tvLoaded = true; }, 600);
     }
   }, 800);
 };
 
 window._ctTVSignup = function(){
-  window.open(
-    'https://www.tradingview.com/accounts/signup/',
-    'tv_signup',
-    'width=520,height=700,scrollbars=yes,resizable=yes,toolbar=no,menubar=no'
-  );
+  _ctOpenTVPopup('https://www.tradingview.com/accounts/signup/', 520, 700);
 };
 
 // ── 심볼 변경 ──
