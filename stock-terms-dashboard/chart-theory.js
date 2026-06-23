@@ -125,8 +125,9 @@ function renderHistory(){
   var el = document.getElementById('ct-hist-body');
   if(!el) return;
   var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
-  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; _ctRenderStats([]); return; }
+  if(!hist.length){ el.innerHTML='<tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">저장된 분석이 없습니다. 분석 후 저장 버튼을 누르세요.</td></tr>'; _ctRenderStats([]); _ctRenderHoldings([]); return; }
   _ctRenderStats(hist);
+  _ctRenderHoldings(hist);
   el.innerHTML = hist.map(function(h){
     var rC = h.result==='성공'?'#22c55e':h.result==='실패'?'#ef4444':'#6b7280';
     return '<tr>'
@@ -142,11 +143,45 @@ function renderHistory(){
         +'<option value="보유중" '+(h.result==='보유중'?'selected':'')+'>📊 보유중</option>'
       +'</select></td>'
       +'<td style="white-space:nowrap">'
-      +'<button onclick="window._ctLoadHistory('+h.id+')" title="계산기에 불러오기" style="background:none;border:1px solid var(--bd);border-radius:4px;color:var(--ac);cursor:pointer;font-size:11px;padding:2px 6px;margin-right:4px">↺</button>'
+      +'<button onclick="window._ctEditMemo('+h.id+')" title="메모" style="background:none;border:1px solid var(--bd);border-radius:4px;color:#f59e0b;cursor:pointer;font-size:11px;padding:2px 6px;margin-right:3px">'+(h.memo?'📝':'✏️')+'</button>'
+      +'<button onclick="window._ctLoadHistory('+h.id+')" title="계산기에 불러오기" style="background:none;border:1px solid var(--bd);border-radius:4px;color:var(--ac);cursor:pointer;font-size:11px;padding:2px 6px;margin-right:3px">↺</button>'
       +'<button onclick="window._ctDeleteHistory('+h.id+')" style="background:none;border:none;color:#4b5563;cursor:pointer;font-size:12px">🗑</button>'
       +'</td>'
-    +'</tr>';
+    +'</tr>'
+    +(h.memo?'<tr><td colspan="7" style="padding:4px 12px 8px;font-size:11px;color:#f59e0b;background:rgba(245,158,11,.04)">📝 '+h.memo+'</td></tr>':'');
   }).join('');
+}
+
+// 메모 편집
+window._ctEditMemo = function(id){
+  var hist = JSON.parse(localStorage.getItem('ct_hist')||'[]');
+  var rec = hist.find(function(h){return h.id===id;});
+  if(!rec) return;
+  var memo = prompt('메모를 입력하세요 (비우면 삭제):', rec.memo||'');
+  if(memo===null) return;
+  rec.memo = memo.trim();
+  localStorage.setItem('ct_hist', JSON.stringify(hist));
+  renderHistory();
+};
+
+// 보유중 요약
+function _ctRenderHoldings(hist){
+  var el = document.getElementById('ct-holdings');
+  if(!el) return;
+  var holding = hist.filter(function(h){ return h.result==='보유중'; });
+  if(!holding.length){ el.innerHTML=''; return; }
+  el.innerHTML = '<div style="background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.2);border-radius:12px;padding:14px;margin-bottom:14px">'
+    +'<div style="font-size:14px;font-weight:800;color:#22c55e;margin-bottom:10px">📊 현재 보유중 ('+ holding.length+'건)</div>'
+    +'<div style="display:flex;flex-wrap:wrap;gap:8px">'
+    +holding.map(function(h){
+      return '<div style="padding:8px 12px;background:var(--s2);border-radius:10px;border:1px solid rgba(34,197,94,.3)">'
+        +'<div style="font-size:13px;font-weight:800;color:var(--tx)">'+h.sym+'</div>'
+        +'<div style="font-size:11px;color:#22c55e">진입 '+(h.price?h.price.toLocaleString():'—')+'</div>'
+        +'<div style="font-size:10px;color:#6b7280">'+h.date+'</div>'
+        +(h.memo?'<div style="font-size:10px;color:#f59e0b;margin-top:2px">'+h.memo+'</div>':'')
+        +'</div>';
+    }).join('')
+    +'</div></div>';
 }
 
 // ── 매매 계산기 ──
@@ -1605,6 +1640,140 @@ window._ctAnalyze = function(){
   var result = generateAnalysis(data);
   document.getElementById('ct-output').innerHTML = result;
   document.getElementById('ct-output').scrollIntoView({behavior:'smooth', block:'start'});
+};
+
+// ── 피보나치 되돌림 ──
+window._ctCalcFib = function(){
+  var low  = parseFloat((document.getElementById('ct-fib-low')||{}).value)||0;
+  var high = parseFloat((document.getElementById('ct-fib-high')||{}).value)||0;
+  var cur  = (document.getElementById('ct-fib-cur')||{}).value||'KRW';
+  var res  = document.getElementById('ct-fib-result');
+  if(!res) return;
+  if(!low||!high||low>=high){ res.innerHTML='<div style="font-size:12px;color:#6b7280">저점 &lt; 고점 관계로 입력하세요</div>'; return; }
+  var range = high - low;
+  var fp3 = function(v){ return cur==='USD'?'$'+v.toFixed(2):Math.round(v).toLocaleString()+'원'; };
+  var levels = [
+    {r:0,    label:'0%',    color:'#6b7280', desc:'추세 시작 저점'},
+    {r:0.236,label:'23.6%', color:'#22c55e', desc:'약한 되돌림 — 강한 추세 시 반등'},
+    {r:0.382,label:'38.2%', color:'#22c55e', desc:'1차 지지/저항 (황금비율)'},
+    {r:0.5,  label:'50%',   color:'#f59e0b', desc:'중간 되돌림 — 중립 구간'},
+    {r:0.618,label:'61.8%', color:'#f97316', desc:'★ 핵심 지지/저항 (황금비율 역수)'},
+    {r:0.786,label:'78.6%', color:'#ef4444', desc:'깊은 되돌림 — 이탈 직전'},
+    {r:1,    label:'100%',  color:'#ef4444', desc:'추세 끝 고점'},
+  ];
+  res.innerHTML = '<div style="display:flex;flex-direction:column;gap:4px">'
+    +levels.map(function(lv){
+      var price = high - range*lv.r;
+      return '<div style="display:grid;grid-template-columns:60px 120px 1fr;align-items:center;gap:8px;padding:7px 10px;background:var(--s2);border-radius:8px;border-left:3px solid '+lv.color+'">'
+        +'<div style="font-size:12px;font-weight:800;color:'+lv.color+'">'+lv.label+'</div>'
+        +'<div style="font-size:14px;font-weight:900;color:var(--tx)">'+fp3(price)+'</div>'
+        +'<div style="font-size:11px;color:#6b7280">'+lv.desc+'</div>'
+        +'</div>';
+    }).join('')
+    +'</div>';
+};
+
+// ── 분할 매수 계획기 ──
+window._ctCalcSplit = function(){
+  var budget = parseFloat((document.getElementById('ct-split-budget')||{}).value)||0;
+  var ratio  = ((document.getElementById('ct-split-ratio')||{}).value||'60:40').split(':');
+  var r1=parseInt(ratio[0]), r2=parseInt(ratio[1]);
+  var e1 = parseFloat((document.getElementById('ct-split-e1')||{}).value)||0;
+  var e2 = parseFloat((document.getElementById('ct-split-e2')||{}).value)||0;
+  var sl = parseFloat((document.getElementById('ct-split-sl')||{}).value)||0;
+  var res = document.getElementById('ct-split-result');
+  if(!res) return;
+  if(!budget||!e1){ res.innerHTML='<div style="font-size:12px;color:#6b7280">예산과 1차 진입가를 입력하세요</div>'; return; }
+  var b1 = Math.round(budget*r1/100), b2 = e2?Math.round(budget*r2/100):0;
+  var q1 = e1>0?Math.floor(b1/e1):0;
+  var q2 = e2>0?Math.floor(b2/e2):0;
+  var actual1 = q1*e1, actual2 = q2*e2;
+  var avgPrice = (q1+q2)>0?(actual1+actual2)/(q1+q2):0;
+  var riskPerShare = sl>0?Math.abs(avgPrice-sl):0;
+  var totalRisk = riskPerShare*(q1+q2);
+  res.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="padding:10px;background:var(--s2);border-radius:8px;border-left:3px solid #22c55e">'
+    +'<div style="font-size:10px;color:#22c55e">1차 ('+r1+'%)</div>'
+    +'<div style="font-size:15px;font-weight:900;color:var(--tx)">'+q1.toLocaleString()+'주</div>'
+    +'<div style="font-size:11px;color:#6b7280">'+actual1.toLocaleString()+'원 @ '+e1.toLocaleString()+'</div></div>'
+    +(e2?'<div style="padding:10px;background:var(--s2);border-radius:8px;border-left:3px solid #4ade80">'
+    +'<div style="font-size:10px;color:#4ade80">2차 ('+r2+'%)</div>'
+    +'<div style="font-size:15px;font-weight:900;color:var(--tx)">'+q2.toLocaleString()+'주</div>'
+    +'<div style="font-size:11px;color:#6b7280">'+actual2.toLocaleString()+'원 @ '+e2.toLocaleString()+'</div></div>':'')
+    +(avgPrice?'<div style="padding:10px;background:rgba(245,158,11,.08);border-radius:8px;border:1px solid rgba(245,158,11,.3)">'
+    +'<div style="font-size:10px;color:#f59e0b">평균 단가</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#f59e0b">'+Math.round(avgPrice).toLocaleString()+'원</div>'
+    +'<div style="font-size:11px;color:#6b7280">총 '+(q1+q2).toLocaleString()+'주</div></div>':'')
+    +(sl&&totalRisk?'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)">'
+    +'<div style="font-size:10px;color:#ef4444">총 리스크</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#ef4444">'+Math.round(totalRisk).toLocaleString()+'원</div>'
+    +'<div style="font-size:11px;color:#6b7280">주당 '+Math.round(riskPerShare).toLocaleString()+'원</div></div>':'')
+    +'</div>';
+};
+
+// ── ATR 기반 손절 ──
+window._ctCalcATR = function(){
+  var entry = parseFloat((document.getElementById('ct-atr-entry')||{}).value)||0;
+  var atr   = parseFloat((document.getElementById('ct-atr-val')||{}).value)||0;
+  var mult  = parseFloat((document.getElementById('ct-atr-mult')||{}).value)||1.5;
+  var res   = document.getElementById('ct-atr-result');
+  if(!res) return;
+  if(!entry||!atr){ res.innerHTML='<div style="font-size:12px;color:#6b7280">진입가와 ATR을 입력하세요</div>'; return; }
+  var slLong  = entry - atr*mult;
+  var slShort = entry + atr*mult;
+  var tgt1    = entry + atr*mult*2;
+  var tgt2    = entry + atr*mult*3;
+  var slPct   = Math.abs((slLong-entry)/entry*100).toFixed(1);
+  var fp4 = function(v){ return v>1000?Math.round(v).toLocaleString()+'원':'$'+v.toFixed(2); };
+  res.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)">'
+    +'<div style="font-size:10px;color:#ef4444">⛔ 롱 손절 ('+mult+'×ATR)</div>'
+    +'<div style="font-size:16px;font-weight:900;color:#ef4444">'+fp4(slLong)+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">진입 대비 -'+slPct+'%</div></div>'
+    +'<div style="padding:10px;background:rgba(239,68,68,.08);border-radius:8px;border:1px solid rgba(239,68,68,.2)">'
+    +'<div style="font-size:10px;color:#ef4444">⛔ 숏 손절 ('+mult+'×ATR)</div>'
+    +'<div style="font-size:16px;font-weight:900;color:#ef4444">'+fp4(slShort)+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">진입 대비 +'+slPct+'%</div></div>'
+    +'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)">'
+    +'<div style="font-size:10px;color:#22c55e">🎯 1차 목표 (2R)</div>'
+    +'<div style="font-size:16px;font-weight:900;color:#22c55e">'+fp4(tgt1)+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">R:R 1:2</div></div>'
+    +'<div style="padding:10px;background:rgba(34,197,94,.06);border-radius:8px;border:1px solid rgba(34,197,94,.15)">'
+    +'<div style="font-size:10px;color:#4ade80">🎯 2차 목표 (3R)</div>'
+    +'<div style="font-size:16px;font-weight:900;color:#4ade80">'+fp4(tgt2)+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">R:R 1:3</div></div>'
+    +'</div>';
+};
+
+// ── 손익분기 계산기 ──
+window._ctCalcBE = function(){
+  var entry  = parseFloat((document.getElementById('ct-be-entry')||{}).value)||0;
+  var feePct = parseFloat((document.getElementById('ct-be-fee')||{}).value)||0.33;
+  var tgtPct = parseFloat((document.getElementById('ct-be-target')||{}).value)||10;
+  var res    = document.getElementById('ct-be-result');
+  if(!res) return;
+  if(!entry){ res.innerHTML='<div style="font-size:12px;color:#6b7280">평균 단가를 입력하세요</div>'; return; }
+  var fee = feePct/100;
+  var be  = Math.round(entry * (1+fee*2));  // 매수+매도 수수료 커버
+  var t1  = Math.round(entry * (1+fee*2+tgtPct/100));
+  var t5  = Math.round(entry * (1+fee*2+0.05));
+  var t20 = Math.round(entry * (1+fee*2+0.20));
+  res.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    +'<div style="padding:10px;background:rgba(245,158,11,.08);border-radius:8px;border:1px solid rgba(245,158,11,.3)">'
+    +'<div style="font-size:10px;color:#f59e0b">⚖️ 손익분기점 (수수료포함)</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#f59e0b">'+be.toLocaleString()+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">단가 대비 +'+((be-entry)/entry*100).toFixed(2)+'%</div></div>'
+    +'<div style="padding:10px;background:rgba(34,197,94,.08);border-radius:8px;border:1px solid rgba(34,197,94,.2)">'
+    +'<div style="font-size:10px;color:#22c55e">🎯 목표 '+tgtPct+'% 주가</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#22c55e">'+t1.toLocaleString()+'</div>'
+    +'<div style="font-size:11px;color:#6b7280">수수료·세금 포함</div></div>'
+    +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+    +'<div style="font-size:10px;color:#6b7280">+5% 달성 주가</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--tx)">'+t5.toLocaleString()+'</div></div>'
+    +'<div style="padding:10px;background:var(--s2);border-radius:8px">'
+    +'<div style="font-size:10px;color:#6b7280">+20% 달성 주가</div>'
+    +'<div style="font-size:16px;font-weight:800;color:var(--tx)">'+t20.toLocaleString()+'</div></div>'
+    +'</div>';
 };
 
 // ── % 계산 헬퍼 ──
@@ -3201,6 +3370,7 @@ function buildTabBar(){
     {id:'chart',label:'📈 차트 분석'},
     {id:'analyze',label:'🔬 상세 입력'},
     {id:'history',label:'📋 분석 기록'},
+    {id:'tools',label:'🧮 계산 도구'},
     {id:'theory',label:'📚 이론 가이드'}
   ];
   return '<div class="ct-tab-bar">'
@@ -3208,7 +3378,7 @@ function buildTabBar(){
   +'</div>';
 }
 
-function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildHistoryPane()+buildTheoryPane(); }
+function buildTabContent(){ return buildChartPane()+buildAnalyzePane()+buildHistoryPane()+buildToolsPane()+buildTheoryPane(); }
 
 // ── 차트 탭 ──
 function buildChartPane(){
@@ -3375,6 +3545,8 @@ function buildHistoryPane(){
   +'<div id="ct-calc-result" style="font-size:13px;color:#6b7280">계좌 크기와 진입가를 입력하면 자동 계산됩니다.</div>'
   +'</div>'
 
+  // 보유중 요약
+  +'<div id="ct-holdings"></div>'
   // 분석 기록 통계
   +'<div id="ct-hist-stats"></div>'
 
@@ -3391,6 +3563,91 @@ function buildHistoryPane(){
   +'<tbody id="ct-hist-body"><tr><td colspan="7" style="text-align:center;color:#6b7280;padding:20px">불러오는 중...</td></tr></tbody>'
   +'</table>'
   +'</div>'
+  +'</div>';
+}
+
+// ── 계산 도구 탭 ──
+function buildToolsPane(){
+  return '<div class="ct-pane" data-pane="tools" style="display:none;padding:16px">'
+
+  // ① 피보나치 되돌림
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">🌀 피보나치 되돌림 계산기</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">추세 고점·저점 입력 → 주요 되돌림 레벨 자동 계산</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">📈 추세 시작 (저점)</div>'
+  +'<input id="ct-fib-low" class="ct-input" type="number" placeholder="예: 50000" oninput="window._ctCalcFib()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">📉 추세 끝 (고점)</div>'
+  +'<input id="ct-fib-high" class="ct-input" type="number" placeholder="예: 80000" oninput="window._ctCalcFib()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">🌐 통화</div>'
+  +'<select id="ct-fib-cur" class="ct-input" onchange="window._ctCalcFib()">'
+  +'<option value="KRW">원화</option><option value="USD">달러</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div id="ct-fib-result"><div style="font-size:12px;color:#6b7280">저점과 고점을 입력하세요</div></div>'
+  +'</div>'
+
+  // ② 분할 매수 계산기
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📊 분할 매수 계획기</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">총 투자금과 진입 가격 2개 입력 → 최적 수량 및 평균단가 계산</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💰 총 투자 예산</div>'
+  +'<input id="ct-split-budget" class="ct-input" type="number" placeholder="예: 2000000" oninput="window._ctCalcSplit()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">📐 1차 : 2차 비율</div>'
+  +'<select id="ct-split-ratio" class="ct-input" onchange="window._ctCalcSplit()">'
+  +'<option value="50:50">50:50 (균등)</option>'
+  +'<option value="60:40" selected>60:40 (1차 우선)</option>'
+  +'<option value="70:30">70:30 (1차 집중)</option>'
+  +'<option value="40:60">40:60 (2차 적극)</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#22c55e;margin-bottom:4px">🟢 1차 진입가</div>'
+  +'<input id="ct-split-e1" class="ct-input" type="number" placeholder="1차 매수가" oninput="window._ctCalcSplit()"></div>'
+  +'<div><div style="font-size:11px;color:#4ade80;margin-bottom:4px">🟩 2차 진입가</div>'
+  +'<input id="ct-split-e2" class="ct-input" type="number" placeholder="2차 매수가" oninput="window._ctCalcSplit()"></div>'
+  +'<div><div style="font-size:11px;color:#ef4444;margin-bottom:4px">⛔ 손절가</div>'
+  +'<input id="ct-split-sl" class="ct-input" type="number" placeholder="손절가" oninput="window._ctCalcSplit()"></div>'
+  +'</div>'
+  +'<div id="ct-split-result"><div style="font-size:12px;color:#6b7280">예산과 진입가를 입력하세요</div></div>'
+  +'</div>'
+
+  // ③ ATR 기반 동적 손절
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px;margin-bottom:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">📏 ATR 기반 손절 계산기</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">ATR(Average True Range) 배수로 변동성에 맞는 손절가 계산</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💵 현재 가격 (진입가)</div>'
+  +'<input id="ct-atr-entry" class="ct-input" type="number" placeholder="진입가" oninput="window._ctCalcATR()"></div>'
+  +'<div><div style="font-size:11px;color:#f59e0b;margin-bottom:4px">📊 ATR 값</div>'
+  +'<input id="ct-atr-val" class="ct-input" type="number" placeholder="ATR (14일)" oninput="window._ctCalcATR()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">✖ ATR 배수</div>'
+  +'<select id="ct-atr-mult" class="ct-input" onchange="window._ctCalcATR()">'
+  +'<option value="1">1x (타이트)</option>'
+  +'<option value="1.5" selected>1.5x (기본)</option>'
+  +'<option value="2">2x (여유)</option>'
+  +'<option value="3">3x (와이드)</option>'
+  +'</select></div>'
+  +'</div>'
+  +'<div id="ct-atr-result"><div style="font-size:12px;color:#6b7280">진입가와 ATR을 입력하세요</div></div>'
+  +'</div>'
+
+  // ④ 손익분기 계산기
+  +'<div style="background:var(--bg);border:1px solid var(--bd);border-radius:14px;padding:16px">'
+  +'<div style="font-size:15px;font-weight:800;color:var(--tx);margin-bottom:4px">⚖️ 손익분기 & 목표 수익률</div>'
+  +'<div style="font-size:11px;color:#6b7280;margin-bottom:12px">목표 수익률 달성을 위한 최소 주가 계산</div>'
+  +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px">'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💵 평균 매수단가</div>'
+  +'<input id="ct-be-entry" class="ct-input" type="number" placeholder="평균 단가" oninput="window._ctCalcBE()"></div>'
+  +'<div><div style="font-size:11px;color:#6b7280;margin-bottom:4px">💸 수수료+세금 (%)</div>'
+  +'<input id="ct-be-fee" class="ct-input" type="number" value="0.33" step="0.01" placeholder="0.33" oninput="window._ctCalcBE()"></div>'
+  +'<div><div style="font-size:11px;color:#60a5fa;margin-bottom:4px">🎯 목표 수익률 (%)</div>'
+  +'<input id="ct-be-target" class="ct-input" type="number" value="10" placeholder="10" oninput="window._ctCalcBE()"></div>'
+  +'</div>'
+  +'<div id="ct-be-result"><div style="font-size:12px;color:#6b7280">평균 단가를 입력하세요</div></div>'
+  +'</div>'
+
   +'</div>';
 }
 
